@@ -1,6 +1,10 @@
 import { FastifyInstance } from 'fastify';
+import { readFile, writeFile } from 'fs/promises';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { DataManager } from '../DataManager.js';
 import { logger } from '../utils/logger.js';
+import { Config } from '../models/types.js';
 
 /**
  * Register API routes
@@ -86,6 +90,79 @@ export async function registerApiRoutes(
       dataManager.off('update', updateListener);
       logger.debug('Client disconnected from stream');
     });
+  });
+
+  /**
+   * GET /api/config - Get current configuration
+   */
+  fastify.get('/api/config', async (request, reply) => {
+    try {
+      const configPath = process.env.CONFIG_PATH || join(process.cwd(), 'config.json');
+
+      if (!existsSync(configPath)) {
+        // Return default config if file doesn't exist
+        return {
+          adapters: {
+            mock: {
+              enabled: true,
+              deviceCount: 30,
+            },
+            siteManager: {
+              enabled: false,
+              apiKey: '',
+              pollingInterval: 15000,
+            },
+            localNetwork: {
+              enabled: false,
+              baseUrl: 'https://192.168.1.1',
+              username: '',
+              password: '',
+              pollingInterval: 5000,
+              useProxyPrefix: true,
+              verifySsl: false,
+            },
+          },
+          server: {
+            port: 3001,
+            historyRetentionMinutes: 60,
+            logLevel: 'info',
+          },
+        };
+      }
+
+      const configData = await readFile(configPath, 'utf-8');
+      return JSON.parse(configData);
+    } catch (error) {
+      logger.error({ error }, 'Failed to read config');
+      reply.code(500).send({ error: 'Failed to read configuration' });
+    }
+  });
+
+  /**
+   * POST /api/config - Save configuration
+   */
+  fastify.post<{
+    Body: Config;
+  }>('/api/config', async (request, reply) => {
+    try {
+      const configPath = process.env.CONFIG_PATH || join(process.cwd(), 'config.json');
+      const config = request.body;
+
+      // Validate config structure
+      if (!config.adapters || !config.server) {
+        reply.code(400).send({ error: 'Invalid configuration structure' });
+        return;
+      }
+
+      // Write config to file
+      await writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
+
+      logger.info('Configuration saved successfully');
+      return { success: true, message: 'Configuration saved. Restart server to apply changes.' };
+    } catch (error) {
+      logger.error({ error }, 'Failed to save config');
+      reply.code(500).send({ error: 'Failed to save configuration' });
+    }
   });
 
   logger.info('API routes registered');

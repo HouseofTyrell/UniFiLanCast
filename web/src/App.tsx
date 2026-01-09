@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { NetworkCanvas } from './components/NetworkCanvas';
 import { Controls } from './components/Controls';
 import { TimePlayback } from './components/TimePlayback';
+import { ConfigForm } from './components/ConfigForm';
 import { useNetworkData } from './hooks/useNetworkData';
 import { Filter, NetworkSnapshot } from './types';
 import './App.css';
@@ -17,6 +18,7 @@ function App() {
   });
 
   const [playbackSnapshot, setPlaybackSnapshot] = useState<NetworkSnapshot | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
 
   const handleSnapshotChange = useCallback((historySample: any) => {
     setPlaybackSnapshot(historySample);
@@ -35,6 +37,7 @@ function App() {
         adapters={adapters}
         isConnected={isConnected}
         error={error}
+        onConfigClick={() => setShowConfig(true)}
       />
 
       <TimePlayback
@@ -42,6 +45,8 @@ function App() {
         onFetchHistory={fetchHistory}
         onSnapshotChange={handleSnapshotChange}
       />
+
+      {showConfig && <ConfigForm onClose={() => setShowConfig(false)} />}
     </div>
   );
 }

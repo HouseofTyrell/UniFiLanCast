@@ -22,7 +22,6 @@ export class NetworkVisualization {
   private nodes: Map<string, VisualizationNode> = new Map();
   private centerX = 0;
   private centerY = 0;
-  private scale = 1;
   private hoveredNode: VisualizationNode | null = null;
   private particles: Particle[] = [];
   private animationFrame = 0;
@@ -75,7 +74,7 @@ export class NetworkVisualization {
     this.applyForces(links);
   }
 
-  private applyForces(links: Link[]) {
+  private applyForces(_links: Link[]) {
     const nodes = Array.from(this.nodes.values());
 
     // Reset forces

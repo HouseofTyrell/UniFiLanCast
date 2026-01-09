@@ -27,6 +27,30 @@
   color: #ffffff;
 }
 
+.controls-header-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.config-button {
+  background: #333;
+  border: none;
+  color: #ffffff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.config-button:hover {
+  background: #007aff;
+}
+
 .controls-toggle {
   background: #333;
   border: none;
