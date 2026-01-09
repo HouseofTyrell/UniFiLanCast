@@ -1,0 +1,24 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer ring -->
+  <circle cx="32" cy="32" r="28" stroke="#E0E0E0" stroke-width="4" fill="none"/>
+
+  <!-- Inner ring (can be animated) -->
+  <circle cx="32" cy="32" r="22" stroke="#CCCCCC" stroke-width="2" fill="none" opacity="0.6"/>
+
+  <!-- Central fill (glass/glossy effect) -->
+  <circle cx="32" cy="32" r="18" fill="url(#glassGradient)" opacity="0.8"/>
+
+  <!-- Highlight/shine effect -->
+  <ellipse cx="32" cy="22" rx="12" ry="8" fill="white" opacity="0.3"/>
+
+  <!-- Inner shadow -->
+  <circle cx="32" cy="32" r="18" stroke="#999" stroke-width="1" fill="none" opacity="0.2"/>
+
+  <defs>
+    <radialGradient id="glassGradient" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.4" />
+      <stop offset="50%" style="stop-color:#F0F0F0;stop-opacity:0.6" />
+      <stop offset="100%" style="stop-color:#E0E0E0;stop-opacity:0.8" />
+    </radialGradient>
+  </defs>
+</svg>

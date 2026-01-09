@@ -1,0 +1,49 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Rounded square background with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0B2447;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1A3A5C;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="iconGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#6BB6E0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0B2447;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="256" height="256" rx="55" ry="55" fill="url(#bgGradient)"/>
+
+  <!-- Icon content (scaled and centered) -->
+  <g transform="translate(128, 128)">
+    <!-- Outer arc -->
+    <path d="M 52 -68 A 70 70 0 0 1 78 0" stroke="#5B8FB9" stroke-width="7" stroke-linecap="round" fill="none"/>
+
+    <!-- Middle arc -->
+    <path d="M 42 -50 A 56 56 0 0 1 64 0" stroke="#4A9ECC" stroke-width="6" stroke-linecap="round" fill="none"/>
+
+    <!-- Inner spiral arc -->
+    <path d="M 32 -34 A 40 40 0 0 1 46 0" stroke="#6BB6E0" stroke-width="5" stroke-linecap="round" fill="none"/>
+
+    <!-- Curved flow lines -->
+    <path d="M -44 -58 Q -24 -38 -4 -28" stroke="#5B8FB9" stroke-width="5" stroke-linecap="round" fill="none"/>
+    <path d="M -54 -16 Q -34 -6 -14 -2" stroke="#4A9ECC" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+    <path d="M -48 22 Q -28 16 -8 10" stroke="#6BB6E0" stroke-width="4.5" stroke-linecap="round" fill="none"/>
+
+    <!-- Network nodes (white circles) -->
+    <circle cx="52" cy="-68" r="9" fill="white"/>
+    <circle cx="-44" cy="-58" r="8" fill="white"/>
+    <circle cx="42" cy="-50" r="7.5" fill="white"/>
+    <circle cx="-54" cy="-16" r="7.5" fill="white"/>
+    <circle cx="32" cy="-34" r="7.5" fill="white"/>
+    <circle cx="-48" cy="22" r="8" fill="white"/>
+    <circle cx="-8" cy="10" r="6.5" fill="white"/>
+    <circle cx="46" cy="0" r="7.5" fill="white"/>
+
+    <!-- Central glow effect -->
+    <circle cx="0" cy="0" r="50" fill="url(#iconGlow)" opacity="0.3"/>
+  </g>
+
+  <!-- Subtle shadow/depth effect -->
+  <rect width="256" height="256" rx="55" ry="55" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
+</svg>
