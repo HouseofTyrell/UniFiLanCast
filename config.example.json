@@ -1,0 +1,27 @@
+{
+  "adapters": {
+    "mock": {
+      "enabled": true,
+      "deviceCount": 30
+    },
+    "siteManager": {
+      "enabled": false,
+      "apiKey": "YOUR_SITE_MANAGER_API_KEY",
+      "pollingInterval": 15000
+    },
+    "localNetwork": {
+      "enabled": false,
+      "baseUrl": "https://192.168.1.1",
+      "username": "YOUR_USERNAME",
+      "password": "YOUR_PASSWORD",
+      "pollingInterval": 5000,
+      "useProxyPrefix": true,
+      "verifySsl": false
+    }
+  },
+  "server": {
+    "port": 3001,
+    "historyRetentionMinutes": 60,
+    "logLevel": "info"
+  }
+}
