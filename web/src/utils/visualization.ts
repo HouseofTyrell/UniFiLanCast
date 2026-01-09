@@ -25,11 +25,48 @@ export class NetworkVisualization {
   private hoveredNode: VisualizationNode | null = null;
   private particles: Particle[] = [];
   private animationFrame = 0;
+  private deviceIcons: Map<string, HTMLImageElement> = new Map();
+  private iconsLoaded = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.resize();
+    this.loadDeviceIcons();
+  }
+
+  private loadDeviceIcons() {
+    const iconPaths = {
+      gateway: '/icons/device-gateway.svg',
+      switch: '/icons/device-switch.svg',
+      ap: '/icons/device-ap.svg',
+      client: '/icons/device-laptop.svg',
+      server: '/icons/device-server.svg',
+      router: '/icons/device-router.svg',
+      cloud: '/icons/device-cloud.svg',
+    };
+
+    let loadedCount = 0;
+    const totalIcons = Object.keys(iconPaths).length;
+
+    for (const [type, path] of Object.entries(iconPaths)) {
+      const img = new Image();
+      img.onload = () => {
+        loadedCount++;
+        if (loadedCount === totalIcons) {
+          this.iconsLoaded = true;
+        }
+      };
+      img.onerror = () => {
+        console.warn(`Failed to load icon: ${path}`);
+        loadedCount++;
+        if (loadedCount === totalIcons) {
+          this.iconsLoaded = true;
+        }
+      };
+      img.src = path;
+      this.deviceIcons.set(type, img);
+    }
   }
 
   resize() {
@@ -331,12 +368,25 @@ export class NetworkVisualization {
     this.ctx.fill();
     this.ctx.stroke();
 
-    // Draw icon indicator
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.font = `${node.radius}px Arial`;
-    this.ctx.textAlign = 'center';
-    this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(this.getNodeIcon(device.type), node.x, node.y);
+    // Draw icon - use SVG if loaded, otherwise fallback to text
+    const icon = this.deviceIcons.get(device.type);
+    if (this.iconsLoaded && icon && icon.complete) {
+      const iconSize = node.radius * 1.8;
+      this.ctx.drawImage(
+        icon,
+        node.x - iconSize / 2,
+        node.y - iconSize / 2,
+        iconSize,
+        iconSize
+      );
+    } else {
+      // Fallback to text icons
+      this.ctx.fillStyle = '#ffffff';
+      this.ctx.font = `${node.radius}px Arial`;
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(this.getNodeIcon(device.type), node.x, node.y);
+    }
 
     // Draw WiFi signal indicator
     if (device.wiredOrWifi === 'wifi' && device.rssi) {

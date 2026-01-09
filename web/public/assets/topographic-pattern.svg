@@ -1,0 +1,72 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark background -->
+  <rect width="1200" height="800" fill="#0a0e1a"/>
+
+  <!-- Topographic contour lines - organic flowing patterns -->
+
+  <!-- Pattern cluster 1 (top-left) -->
+  <path d="M 50 100 Q 100 80 150 100 T 250 100 T 350 120"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 40 130 Q 90 110 140 130 T 240 130 T 340 150"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 30 160 Q 80 140 130 160 T 230 160 T 330 180"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.4"/>
+
+  <!-- Pattern cluster 2 (center) -->
+  <path d="M 400 250 Q 450 200 500 250 Q 550 300 600 250 Q 650 200 700 250"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 380 280 Q 430 230 480 280 Q 530 330 580 280 Q 630 230 680 280"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 360 310 Q 410 260 460 310 Q 510 360 560 310 Q 610 260 660 310"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.4"/>
+  <path d="M 340 340 Q 390 290 440 340 Q 490 390 540 340 Q 590 290 640 340"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.3"/>
+
+  <!-- Pattern cluster 3 (right side) -->
+  <path d="M 850 150 Q 900 180 950 150 T 1050 150 T 1150 170"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 840 180 Q 890 210 940 180 T 1040 180 T 1140 200"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 830 210 Q 880 240 930 210 T 1030 210 T 1130 230"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.4"/>
+
+  <!-- Pattern cluster 4 (bottom-left) -->
+  <path d="M 100 500 Q 150 480 200 500 Q 250 520 300 500"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 90 530 Q 140 510 190 530 Q 240 550 290 530"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 80 560 Q 130 540 180 560 Q 230 580 280 560"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.4"/>
+  <path d="M 70 590 Q 120 570 170 590 Q 220 610 270 590"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.3"/>
+
+  <!-- Pattern cluster 5 (bottom-center) -->
+  <path d="M 400 600 Q 480 550 560 600 Q 640 650 720 600"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 380 630 Q 460 580 540 630 Q 620 680 700 630"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 360 660 Q 440 610 520 660 Q 600 710 680 660"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.4"/>
+
+  <!-- Pattern cluster 6 (bottom-right) -->
+  <path d="M 850 550 Q 900 530 950 550 T 1050 550 T 1150 570"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <path d="M 840 580 Q 890 560 940 580 T 1040 580 T 1140 600"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 830 610 Q 880 590 930 610 T 1030 610 T 1130 630"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.4"/>
+
+  <!-- Additional organic curves -->
+  <path d="M 200 350 Q 280 320 360 350 Q 440 380 520 350"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <path d="M 650 420 Q 720 390 790 420 Q 860 450 930 420"
+        stroke="#1a2332" stroke-width="1.5" fill="none" opacity="0.5"/>
+
+  <!-- Subtle additional layers for depth -->
+  <path d="M 300 200 Q 350 220 400 200 Q 450 180 500 200"
+        stroke="#1a2332" stroke-width="1" fill="none" opacity="0.3"/>
+  <path d="M 600 300 Q 650 320 700 300 Q 750 280 800 300"
+        stroke="#1a2332" stroke-width="1" fill="none" opacity="0.3"/>
+  <path d="M 150 450 Q 200 470 250 450 Q 300 430 350 450"
+        stroke="#1a2332" stroke-width="1" fill="none" opacity="0.3"/>
+</svg>

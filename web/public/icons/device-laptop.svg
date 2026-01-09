@@ -1,0 +1,36 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Laptop screen -->
+  <rect x="16" y="14" width="32" height="24" rx="1" fill="#2D3748" stroke="#1A202C" stroke-width="2"/>
+
+  <!-- Screen content (display) -->
+  <rect x="18" y="16" width="28" height="20" rx="0.5" fill="#4A5568"/>
+
+  <!-- Screen glow/highlight -->
+  <rect x="18" y="16" width="28" height="20" rx="0.5" fill="url(#screenGlow)" opacity="0.3"/>
+
+  <!-- Camera -->
+  <circle cx="32" cy="15" r="1" fill="#666"/>
+
+  <!-- Laptop base/keyboard -->
+  <path d="M 14 38 L 16 38 L 18 42 L 46 42 L 48 38 L 50 38 L 52 46 L 12 46 Z" fill="#4A5568" stroke="#2D3748" stroke-width="1.5"/>
+
+  <!-- Keyboard detail -->
+  <rect x="20" y="39" width="24" height="2" rx="0.5" fill="#2D3748" opacity="0.5"/>
+
+  <!-- Trackpad -->
+  <rect x="28" y="42" width="8" height="3" rx="0.5" fill="#2D3748" opacity="0.3"/>
+
+  <!-- Connection indicator -->
+  <circle cx="32" cy="26" r="2" fill="#007AFF" opacity="0.6"/>
+
+  <!-- WiFi waves from laptop -->
+  <path d="M 32 22 Q 28 20 26 18" stroke="#007AFF" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.4"/>
+  <path d="M 32 22 Q 36 20 38 18" stroke="#007AFF" stroke-width="1" fill="none" stroke-linecap="round" opacity="0.4"/>
+
+  <defs>
+    <linearGradient id="screenGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#007AFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#007AFF;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+</svg>

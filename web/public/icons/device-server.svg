@@ -1,0 +1,30 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Server rack unit 1 -->
+  <rect x="14" y="14" width="36" height="10" rx="1" fill="#2D3748" stroke="#1A202C" stroke-width="1.5"/>
+  <circle cx="18" cy="19" r="1.5" fill="#00FF00"/>
+  <circle cx="23" cy="19" r="1.5" fill="#00FF00"/>
+  <circle cx="28" cy="19" r="1.5" fill="#FFAA00"/>
+  <rect x="38" y="17" width="8" height="4" rx="1" fill="#4A5568"/>
+
+  <!-- Server rack unit 2 -->
+  <rect x="14" y="26" width="36" height="10" rx="1" fill="#2D3748" stroke="#1A202C" stroke-width="1.5"/>
+  <circle cx="18" cy="31" r="1.5" fill="#00FF00"/>
+  <circle cx="23" cy="31" r="1.5" fill="#00FF00"/>
+  <circle cx="28" cy="31" r="1.5" fill="#00FF00"/>
+  <rect x="38" y="29" width="8" height="4" rx="1" fill="#4A5568"/>
+
+  <!-- Server rack unit 3 -->
+  <rect x="14" y="38" width="36" height="10" rx="1" fill="#2D3748" stroke="#1A202C" stroke-width="1.5"/>
+  <circle cx="18" cy="43" r="1.5" fill="#00FF00"/>
+  <circle cx="23" cy="43" r="1.5" fill="#FF3B30"/>
+  <circle cx="28" cy="43" r="1.5" fill="#00FF00"/>
+  <rect x="38" y="41" width="8" height="4" rx="1" fill="#4A5568"/>
+
+  <!-- Ventilation slots -->
+  <line x1="33" y1="17" x2="33" y2="21" stroke="#1A202C" stroke-width="0.5"/>
+  <line x1="35" y1="17" x2="35" y2="21" stroke="#1A202C" stroke-width="0.5"/>
+  <line x1="33" y1="29" x2="33" y2="33" stroke="#1A202C" stroke-width="0.5"/>
+  <line x1="35" y1="29" x2="35" y2="33" stroke="#1A202C" stroke-width="0.5"/>
+  <line x1="33" y1="41" x2="33" y2="45" stroke="#1A202C" stroke-width="0.5"/>
+  <line x1="35" y1="41" x2="35" y2="45" stroke="#1A202C" stroke-width="0.5"/>
+</svg>
