@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Header } from './components/Header';
 import { NetworkCanvas } from './components/NetworkCanvas';
 import { Controls } from './components/Controls';
 import { TimePlayback } from './components/TimePlayback';
@@ -27,6 +28,8 @@ function App() {
 
   return (
     <div className="app">
+      <Header />
+
       <NetworkCanvas snapshot={displaySnapshot} filter={filter} />
 
       <Controls

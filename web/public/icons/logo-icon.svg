@@ -1,0 +1,43 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="62" fill="#0B2447" stroke="#1E4976" stroke-width="2"/>
+
+  <!-- Outer arc -->
+  <path d="M 90 30 A 35 35 0 0 1 98 64" stroke="#5B8FB9" stroke-width="4" stroke-linecap="round" fill="none"/>
+
+  <!-- Middle arc -->
+  <path d="M 82 40 A 28 28 0 0 1 88 64" stroke="#4A9ECC" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Inner spiral arc 1 -->
+  <path d="M 75 48 A 20 20 0 0 1 78 64" stroke="#6BB6E0" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- Curved flow line 1 -->
+  <path d="M 40 35 Q 50 45 60 48" stroke="#5B8FB9" stroke-width="3" stroke-linecap="round" fill="none"/>
+
+  <!-- Curved flow line 2 -->
+  <path d="M 35 55 Q 45 60 55 62" stroke="#4A9ECC" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Curved flow line 3 -->
+  <path d="M 38 75 Q 48 72 58 70" stroke="#6BB6E0" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+
+  <!-- Network nodes (white circles) -->
+  <circle cx="90" cy="30" r="5" fill="white"/>
+  <circle cx="40" cy="35" r="4.5" fill="white"/>
+  <circle cx="82" cy="40" r="4" fill="white"/>
+  <circle cx="35" cy="55" r="4" fill="white"/>
+  <circle cx="75" cy="48" r="4" fill="white"/>
+  <circle cx="38" cy="75" r="4.5" fill="white"/>
+  <circle cx="60" cy="70" r="3.5" fill="white"/>
+  <circle cx="78" cy="64" r="4" fill="white"/>
+
+  <!-- Central glow effect -->
+  <circle cx="64" cy="64" r="25" fill="url(#glow)" opacity="0.3"/>
+
+  <!-- Gradient definitions -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#6BB6E0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0B2447;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+</svg>

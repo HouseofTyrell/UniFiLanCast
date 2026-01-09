@@ -1,0 +1,89 @@
+/* Topographic Background Pattern Styles */
+
+.topographic-background {
+  position: relative;
+  background-color: #0a0e1a;
+  background-image: url('/assets/topographic-pattern.svg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Alternative: Tiled pattern version */
+.topographic-background-tiled {
+  position: relative;
+  background-color: #0a0e1a;
+  background-image: url('/assets/topographic-pattern.svg');
+  background-size: 1200px 800px;
+  background-position: center;
+  background-repeat: repeat;
+}
+
+/* Animated version - subtle movement */
+.topographic-background-animated {
+  position: relative;
+  background-color: #0a0e1a;
+  background-image: url('/assets/topographic-pattern.svg');
+  background-size: 1400px 900px;
+  background-position: center;
+  background-repeat: repeat;
+  animation: topoShift 120s ease-in-out infinite;
+}
+
+@keyframes topoShift {
+  0%, 100% {
+    background-position: 0% 0%;
+  }
+  25% {
+    background-position: 5% 5%;
+  }
+  50% {
+    background-position: -5% 5%;
+  }
+  75% {
+    background-position: -5% -5%;
+  }
+}
+
+/* Overlay version - for placing on top of existing backgrounds */
+.topographic-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/assets/topographic-pattern.svg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.3;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Canvas container with topographic background */
+.canvas-with-topo {
+  position: relative;
+  background-color: #0a0e1a;
+}
+
+.canvas-with-topo::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url('/assets/topographic-pattern.svg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.canvas-with-topo > canvas {
+  position: relative;
+  z-index: 1;
+}

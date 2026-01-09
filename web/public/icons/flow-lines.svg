@@ -1,0 +1,32 @@
+<svg width="128" height="64" viewBox="0 0 128 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Flowing wave lines (representing data flow) -->
+  <path d="M 0 32 Q 16 24 32 32 T 64 32 T 96 32 T 128 32"
+        stroke="#5B8FB9"
+        stroke-width="2"
+        fill="none"
+        opacity="0.6"/>
+
+  <path d="M 0 38 Q 16 30 32 38 T 64 38 T 96 38 T 128 38"
+        stroke="#4A9ECC"
+        stroke-width="2"
+        fill="none"
+        opacity="0.5"/>
+
+  <path d="M 0 44 Q 16 36 32 44 T 64 44 T 96 44 T 128 44"
+        stroke="#6BB6E0"
+        stroke-width="2"
+        fill="none"
+        opacity="0.4"/>
+
+  <path d="M 0 20 Q 16 12 32 20 T 64 20 T 96 20 T 128 20"
+        stroke="#5B8FB9"
+        stroke-width="1.5"
+        fill="none"
+        opacity="0.3"/>
+
+  <path d="M 0 26 Q 16 18 32 26 T 64 26 T 96 26 T 128 26"
+        stroke="#4A9ECC"
+        stroke-width="1.5"
+        fill="none"
+        opacity="0.3"/>
+</svg>

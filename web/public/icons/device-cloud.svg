@@ -1,0 +1,18 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Cloud shape -->
+  <path d="M 20 36 C 16 36 12 32 12 28 C 12 24 16 20 20 20 C 20 16 24 12 28 12 C 32 12 36 16 36 20 C 40 20 44 24 44 28 C 48 28 52 32 52 36 C 52 40 48 44 44 44 L 20 44 C 16 44 12 40 12 36 Z" fill="url(#cloudGradient)" stroke="#007AFF" stroke-width="2"/>
+
+  <!-- Globe/internet symbol inside cloud -->
+  <circle cx="32" cy="30" r="8" stroke="#007AFF" stroke-width="1.5" fill="none"/>
+  <ellipse cx="32" cy="30" rx="4" ry="8" stroke="#007AFF" stroke-width="1.5" fill="none"/>
+  <line x1="24" y1="30" x2="40" y2="30" stroke="#007AFF" stroke-width="1.5"/>
+  <path d="M 26 26 Q 32 25 38 26" stroke="#007AFF" stroke-width="1" fill="none"/>
+  <path d="M 26 34 Q 32 35 38 34" stroke="#007AFF" stroke-width="1" fill="none"/>
+
+  <defs>
+    <linearGradient id="cloudGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#E8F4FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#B8D8F0;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>
