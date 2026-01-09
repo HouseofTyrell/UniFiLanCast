@@ -8,6 +8,7 @@ interface ControlsProps {
   adapters: AdapterStatus[];
   isConnected: boolean;
   error: string | null;
+  onConfigClick: () => void;
 }
 
 export function Controls({
@@ -16,6 +17,7 @@ export function Controls({
   adapters,
   isConnected,
   error,
+  onConfigClick,
 }: ControlsProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -23,12 +25,21 @@ export function Controls({
     <div className="controls">
       <div className="controls-header">
         <h1>Network Weather Map</h1>
-        <button
-          className="controls-toggle"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? '▼' : '▲'}
-        </button>
+        <div className="controls-header-buttons">
+          <button
+            className="config-button"
+            onClick={onConfigClick}
+            title="Configuration"
+          >
+            ⚙️
+          </button>
+          <button
+            className="controls-toggle"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? '▼' : '▲'}
+          </button>
+        </div>
       </div>
 
       {isExpanded && (
