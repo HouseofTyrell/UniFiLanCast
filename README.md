@@ -66,7 +66,7 @@ A real-time network visualization dashboard that displays your UniFi network as 
 **1. Clone and install dependencies:**
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/HouseofTyrell/UniFiLanCast.git
 cd UniFiLanCast
 npm install
 ```
