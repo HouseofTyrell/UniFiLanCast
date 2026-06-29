@@ -9,6 +9,7 @@ import {
   DeviceType,
 } from '../models/types.js';
 import { logger } from '../utils/logger.js';
+import { resolveClientTraffic } from './clientTraffic.js';
 
 export interface IntegrationApiConfig {
   baseUrl: string;
@@ -178,10 +179,11 @@ export class IntegrationApiAdapter implements NetworkAdapter {
             const client = this.normalizeClient(raw, site.id);
             const legacy = client.mac ? legacyRates.get(client.mac.toLowerCase()) : undefined;
             if (legacy) {
-              client.rxBytes = legacy.downRate; // download
-              client.txBytes = legacy.upRate; // upload
-              client.totalRxBytes = legacy.totalDown;
-              client.totalTxBytes = legacy.totalUp;
+              const traffic = resolveClientTraffic(undefined, undefined, legacy);
+              client.rxBytes = traffic.rxBytes;
+              client.txBytes = traffic.txBytes;
+              client.totalRxBytes = traffic.totalRxBytes;
+              client.totalTxBytes = traffic.totalTxBytes;
               if (legacy.rssiDbm !== undefined) client.rssi = legacy.rssiDbm;
               if (legacy.experience !== undefined) client.experience = legacy.experience;
               if (legacy.vendor) client.vendor = legacy.vendor;
@@ -352,6 +354,12 @@ export class IntegrationApiAdapter implements NetworkAdapter {
   private normalizeClient(raw: any, siteId: string): Device {
     const mac = raw.macAddress || raw.mac;
     const wired = this.isWiredClient(raw);
+    // The Integration API's tx/rx are cumulative counters, not rates — keep them
+    // as totals; the instantaneous rate is filled later from legacy stat/sta.
+    const traffic = resolveClientTraffic(
+      this.pickNumber(raw, ['txBytes', 'tx_bytes']),
+      this.pickNumber(raw, ['rxBytes', 'rx_bytes'])
+    );
     return {
       id: raw.id || mac,
       name: raw.name || raw.hostname || mac || 'Unknown Client',
@@ -364,8 +372,10 @@ export class IntegrationApiAdapter implements NetworkAdapter {
       ssid: raw.ssid || raw.essid,
       rssi: this.pickNumber(raw, ['signalStrength', 'rssi', 'signal']),
       vlanId: this.pickNumber(raw, ['vlanId', 'vlan']),
-      txBytes: this.pickNumber(raw, ['txBytes', 'tx_bytes']) ?? 0,
-      rxBytes: this.pickNumber(raw, ['rxBytes', 'rx_bytes']) ?? 0,
+      txBytes: traffic.txBytes,
+      rxBytes: traffic.rxBytes,
+      totalRxBytes: traffic.totalRxBytes,
+      totalTxBytes: traffic.totalTxBytes,
       lastSeen: this.toMs(raw.lastSeen ?? raw.connectedAt) ?? Date.now(),
       online: true,
       latencyMs: this.pickNumber(raw, ['latencyMs', 'latency']),
