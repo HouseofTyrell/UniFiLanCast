@@ -143,7 +143,8 @@ web/      React + Vite + HTML5 canvas
 ```bash
 npm run build          # build server + web
 npm run typecheck      # tsc --noEmit, both workspaces
-npm run ci             # local CI gate: typecheck + build (+ tests when present)
+npm run test           # Vitest, both workspaces
+npm run ci             # local CI gate: typecheck + build + test
 ```
 
 ### Local CI
@@ -156,7 +157,7 @@ git config core.hooksPath .githooks
 
 Bypass in an emergency with `git push --no-verify`. CI is **local-only** for now (no GitHub Actions).
 
-> ⚠️ There is no automated test suite yet — `npm run ci` already runs `npm test` (a no-op until test scripts exist), so adding Vitest later needs no CI changes. See [NEXT_STEPS.md](NEXT_STEPS.md). Keep server and web type definitions in sync.
+Tests use **Vitest** and cover the highest-risk logic (rate→bytes integration, config validation/redaction, alert delivery/throttle, formatting, VLAN coloring). They run in `npm run ci` and gate every push. See [NEXT_STEPS.md](NEXT_STEPS.md) for remaining coverage (adapter fixtures, hooks, layout). Keep server and web type definitions in sync.
 
 ---
 

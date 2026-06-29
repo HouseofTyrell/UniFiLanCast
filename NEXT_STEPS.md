@@ -43,7 +43,7 @@ A full multi-dimension code review (architecture, correctness, security, perform
 - **Performance/rendering** — `devicePixelRatio` applied, fixing blurry Retina canvas (PERF-1); SSE serialize-once (PERF-6); `getDeviceUsages` map reuse (PERF-7); single long-lived rAF loop (PERF-8).
 
 ### ⏳ Remaining (prioritized)
-- [ ] **No automated tests** — add Vitest (web) + a backend runner; cover rate→bytes integration, adapter unit reconciliation, layout math.
+- [~] **Automated tests** — Vitest is set up in both workspaces and gates every push via `npm run ci`; 28 tests cover the rate→bytes integration, config validation/redaction/secret-preservation, alert delivery/throttle, formatting, and VLAN coloring. _Remaining: adapter normalization fixtures (legacy unit conversion / client direction), React hook tests (SSE cleanup), layout math, and coverage thresholds._
 - [ ] **Usage-integration cadence** — store (30s) vs in-memory (5s) sampling diverge; `dt>180s` gaps silently dropped → under-counted totals. Make cadence explicit/consistent; clamp rather than drop gaps (COR-3).
 - [ ] **`fetchData` drops events captured between polls** when capture cadence < poll cadence — buffer & drain, or validate the config combination (COR-2).
 - [ ] **Client rate/counter unit ambiguity** for clients with no legacy match — always set `rxBytes/txBytes` to rates, keep cumulative in totals (COR-4).

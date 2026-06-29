@@ -3,6 +3,7 @@ import { NetworkSnapshot, HistorySample, NetworkEvent } from './models/types.js'
 import { WeatherEngine } from './utils/weatherEngine.js';
 import { Store } from './Store.js';
 import { logger } from './utils/logger.js';
+import { integrateSeries, integrateDeviceUsages } from './utils/usage.js';
 import { EventEmitter } from 'events';
 
 export interface DataManagerOptions {
@@ -128,15 +129,7 @@ export class DataManager extends EventEmitter {
       return { t: s.timestamp, down: dev?.rxBytes ?? 0, up: dev?.txBytes ?? 0 };
     });
 
-    let downBytes = 0;
-    let upBytes = 0;
-    for (let i = 1; i < series.length; i++) {
-      const dt = (series[i].t - series[i - 1].t) / 1000; // seconds
-      if (dt <= 0 || dt > 180) continue; // skip gaps (restarts etc.)
-      // trapezoidal integration of bits/sec → bytes (÷8)
-      downBytes += ((series[i - 1].down + series[i].down) / 2) * dt / 8;
-      upBytes += ((series[i - 1].up + series[i].up) / 2) * dt / 8;
-    }
+    const { downBytes, upBytes } = integrateSeries(series);
 
     // Downsample the series to keep the response light.
     const step = Math.max(1, Math.ceil(series.length / 80));
@@ -153,26 +146,7 @@ export class DataManager extends EventEmitter {
    * each device's rate across the persisted history in a single pass.
    */
   getDeviceUsages(minutes: number): Record<string, { down: number; up: number }> {
-    const samples = this.getHistory(minutes);
-    const totals: Record<string, { down: number; up: number }> = {};
-    // Carry the previous sample's index across iterations instead of rebuilding
-    // a Map every step.
-    let prev = samples.length ? new Map(samples[0].devices.map(d => [d.id, d])) : new Map();
-    for (let i = 1; i < samples.length; i++) {
-      const dt = (samples[i].timestamp - samples[i - 1].timestamp) / 1000;
-      const cur = new Map(samples[i].devices.map(d => [d.id, d]));
-      if (dt > 0 && dt <= 180) {
-        for (const [id, d] of cur) {
-          const p = prev.get(id);
-          if (!p) continue;
-          const t = totals[id] || (totals[id] = { down: 0, up: 0 });
-          t.down += (((p.rxBytes ?? 0) + (d.rxBytes ?? 0)) / 2) * dt / 8;
-          t.up += (((p.txBytes ?? 0) + (d.txBytes ?? 0)) / 2) * dt / 8;
-        }
-      }
-      prev = cur;
-    }
-    return totals;
+    return integrateDeviceUsages(this.getHistory(minutes));
   }
 
   /**
