@@ -44,12 +44,18 @@ Out of the box it runs in **mock mode** (simulated devices). To connect real har
 
 ### Production (Docker)
 
+A **single container** serves the API/SSE and the built web UI (no separate nginx):
+
 ```bash
-cp config.example.json config.json   # edit for your network
-docker-compose up -d                  # dashboard on http://localhost:8080
+cp config.example.json config.json    # mock mode works out of the box
+docker compose up -d --build           # dashboard on http://localhost:8080
 ```
 
-> The server binds **`127.0.0.1` by default** and refuses to start LAN-exposed without auth (fail-closed). To reach it from other hosts (including across a Docker bridge), set `server.host: "0.0.0.0"` in `config.json` **and** enable `auth`.
+- Real hardware: put `UNIFI_API_KEY=...` in a `.env` file (auto-loaded) and enable the `integrationApi` adapter in `config.json`.
+- SQLite history persists in the `unifi-data` volume (survives `docker compose down && up`).
+- `config.json` is mounted read-write so the in-app config editor works.
+
+> The container binds `0.0.0.0` internally (via `HOST`) while the compose port mapping is **`127.0.0.1:8080`** — host-loopback only by default. To expose it on your LAN, enable `auth` in `config.json` and change that mapping to `8080:3001`. (Outside Docker, `npm start` still binds `127.0.0.1` and refuses to start LAN-exposed without auth — fail-closed.)
 
 ---
 

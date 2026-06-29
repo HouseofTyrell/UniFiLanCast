@@ -53,3 +53,7 @@ NetworkVisualization (canvas)           web/src/utils/visualization.ts
 ## Build & run
 
 `npm run dev` runs both workspaces (concurrently). Server: `tsx watch`. Web: Vite. `npm run build` builds both (`tsc` + `vite build`). Secrets via `.env`; data in `<repo>/data` (gitignored).
+
+## Deployment
+
+Production ships as a **single container** (root `Dockerfile`, multi-stage). The build context is the repo root so the npm-workspace lockfile is usable; the build stage carries the `better-sqlite3` native toolchain. At runtime the **server serves the web bundle as static files** (`@fastify/static` from `<cwd>/public`, populated from `web/dist`), so the same origin serves the API, SSE, and UI — no reverse proxy, so SSE needs no special tuning. `docker compose` mounts `config.json` and a named `unifi-data` volume (SQLite), auto-loads `.env`, and sets `HOST=0.0.0.0` + `ALLOW_INSECURE_BIND=1` while restricting exposure via a `127.0.0.1` host port mapping.
