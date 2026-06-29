@@ -10,6 +10,10 @@ import {
 } from '../models/types.js';
 import { logger } from '../utils/logger.js';
 import { resolveClientTraffic } from './clientTraffic.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
+
+/** Max simultaneous per-device controller requests during a capture. */
+const DEVICE_FETCH_CONCURRENCY = 6;
 
 export interface IntegrationApiConfig {
   baseUrl: string;
@@ -140,30 +144,31 @@ export class IntegrationApiAdapter implements NetworkAdapter {
       for (const site of targetSites) {
         const rawDevices = await this.listAll(`${API_PREFIX}/sites/${site.id}/devices`);
 
-        for (const raw of rawDevices) {
+        // Fetch each device's detail + statistics with BOUNDED concurrency
+        // (instead of two sequential round-trips per device across the whole
+        // list), so a slow controller can't stretch the capture past its
+        // interval. Order is preserved for deterministic event recording.
+        const built = await mapWithConcurrency(rawDevices, DEVICE_FETCH_CONCURRENCY, async raw => {
           const device = this.normalizeDevice(raw, site.id);
+          const base = `${API_PREFIX}/sites/${site.id}/devices/${raw.id}`;
+          const [detail, stats] = await Promise.all([
+            // detail carries uplink.deviceId (topology edges)
+            this.getJson(base).catch(() => {
+              logger.debug({ deviceId: raw.id }, 'Device detail not available');
+              return undefined;
+            }),
+            // statistics/latest carries traffic rates, latency, uptime
+            this.getJson(`${base}/statistics/latest`).catch(() => {
+              logger.debug({ deviceId: raw.id }, 'Device statistics not available');
+              return undefined;
+            }),
+          ]);
+          if (detail) this.applyDeviceDetail(device, detail);
+          if (stats) this.applyDeviceStats(device, stats);
+          return device;
+        });
 
-          // The list payload omits uplink topology; the detail call carries
-          // `uplink.deviceId`, which is how we draw infrastructure edges.
-          try {
-            const detail = await this.getJson(
-              `${API_PREFIX}/sites/${site.id}/devices/${raw.id}`
-            );
-            this.applyDeviceDetail(device, detail);
-          } catch (error) {
-            logger.debug({ deviceId: raw.id }, 'Device detail not available');
-          }
-
-          // Enrich with live statistics (traffic rates, latency, uptime).
-          try {
-            const stats = await this.getJson(
-              `${API_PREFIX}/sites/${site.id}/devices/${raw.id}/statistics/latest`
-            );
-            this.applyDeviceStats(device, stats);
-          } catch (error) {
-            logger.debug({ deviceId: raw.id }, 'Device statistics not available');
-          }
-
+        for (const device of built) {
           this.recordStateChange(device, events, now);
           devices.push(device);
         }
