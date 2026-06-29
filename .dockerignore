@@ -13,3 +13,6 @@ coverage
 *.log
 .DS_Store
 config.json
+data
+*.db
+.githooks

@@ -271,14 +271,22 @@ async function main() {
   // operator explicitly sets server.host. Refuse to start LAN-exposed without
   // auth (fail-closed) — mirrors the existing auth-misconfig exit above.
   const port = config.server.port;
-  const host = config.server.host || '127.0.0.1';
+  // HOST env overrides config (handy in containers, where the container binds
+  // 0.0.0.0 and the host port mapping controls real exposure).
+  const host = process.env.HOST || config.server.host || '127.0.0.1';
   const isLoopback = host === '127.0.0.1' || host === '::1' || host === 'localhost';
-  if (!isLoopback && !config.auth?.enabled) {
+  const allowInsecureBind =
+    process.env.ALLOW_INSECURE_BIND === '1' || process.env.ALLOW_INSECURE_BIND === 'true';
+  if (!isLoopback && !config.auth?.enabled && !allowInsecureBind) {
     logger.error(
-      `Refusing to start: server.host is "${host}" (LAN-exposed) but auth.enabled is false. ` +
-        'Enable auth or bind 127.0.0.1.'
+      `Refusing to start: host "${host}" is not loopback but auth.enabled is false. ` +
+        'Enable auth, bind 127.0.0.1, or set ALLOW_INSECURE_BIND=1 if the host port ' +
+        'mapping already restricts exposure (e.g. a Docker 127.0.0.1:PORT:3001 mapping).'
     );
     process.exit(1);
+  }
+  if (!isLoopback && !config.auth?.enabled && allowInsecureBind) {
+    logger.warn(`Binding ${host} without auth (ALLOW_INSECURE_BIND set) — ensure the port mapping restricts exposure`);
   }
 
   try {

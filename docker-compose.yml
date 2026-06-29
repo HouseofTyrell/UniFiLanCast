@@ -1,33 +1,36 @@
-version: '3.8'
+# UniFiLanCast — single container serving the API/SSE + the web UI.
+#
+# Quick start:
+#   cp config.example.json config.json     # mock mode works out of the box
+#   docker compose up -d                    # → http://localhost:8080
+#
+# Real hardware: put UNIFI_API_KEY in a .env file (auto-loaded) and enable the
+# integrationApi adapter in config.json. To expose beyond this host, enable auth
+# in config.json and change the port mapping below from 127.0.0.1 to 0.0.0.0.
 
 services:
-  server:
+  app:
     build:
-      context: ./server
+      context: .
       dockerfile: Dockerfile
+    image: unifilancast
+    # Host-loopback only by default. The container itself binds 0.0.0.0 (HOST
+    # below); this mapping is what actually controls exposure.
     ports:
-      - "3001:3001"
-    volumes:
-      - ./config.json:/app/config.json:ro
+      - "127.0.0.1:8080:3001"
     environment:
       - NODE_ENV=production
-      - PORT=3001
+      - HOST=0.0.0.0
+      - ALLOW_INSECURE_BIND=1   # safe: the 127.0.0.1 port mapping restricts exposure
+      - CONFIG_PATH=/config/config.json
+      - DATA_DIR=/data
+    env_file:
+      - path: .env              # UNIFI_API_KEY etc.; optional
+        required: false
+    volumes:
+      - ./config.json:/config/config.json   # read-write so the UI can save config
+      - unifi-data:/data                     # SQLite history survives recreation
     restart: unless-stopped
-    networks:
-      - unifi-weather
 
-  web:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    ports:
-      - "8080:80"
-    depends_on:
-      - server
-    restart: unless-stopped
-    networks:
-      - unifi-weather
-
-networks:
-  unifi-weather:
-    driver: bridge
+volumes:
+  unifi-data:
