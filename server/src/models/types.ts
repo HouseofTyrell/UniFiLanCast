@@ -60,7 +60,13 @@ export interface Link {
 }
 
 export type EventSeverity = 'info' | 'warning' | 'error';
-export type EventType = 'new_device' | 'offline' | 'latency_spike' | 'wan_issue' | 'device_reconnect';
+export type EventType =
+  | 'new_device'
+  | 'offline'
+  | 'latency_spike'
+  | 'packet_loss'
+  | 'wan_issue'
+  | 'device_reconnect';
 
 export interface NetworkEvent {
   ts: number;
@@ -176,5 +182,12 @@ export interface Config {
       packetLoss?: boolean;
       wanIssue?: boolean;
     };
+  };
+  /** Thresholds (with hysteresis) for centralized latency/packet-loss health events. */
+  health?: {
+    latencyHighMs?: number;
+    latencyLowMs?: number;
+    lossHighPct?: number; // fraction 0..1
+    lossLowPct?: number;
   };
 }

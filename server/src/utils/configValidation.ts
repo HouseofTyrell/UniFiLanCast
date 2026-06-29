@@ -18,7 +18,7 @@ export function redactConfig(config: any): any {
   return c;
 }
 
-export const ALLOWED_CONFIG_KEYS = new Set(['adapters', 'server', 'auth', 'alerts']);
+export const ALLOWED_CONFIG_KEYS = new Set(['adapters', 'server', 'auth', 'alerts', 'health']);
 
 /** Minimal runtime validation for a posted config (types are compile-time only). */
 export function validateConfig(body: unknown): string | null {

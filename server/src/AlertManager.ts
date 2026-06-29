@@ -28,6 +28,7 @@ const EVENT_RULE: Partial<Record<EventType, keyof NonNullable<AlertConfig['rules
   offline: 'deviceOffline',
   device_reconnect: 'deviceOffline',
   latency_spike: 'latencySpike',
+  packet_loss: 'packetLoss',
   wan_issue: 'wanIssue',
 };
 

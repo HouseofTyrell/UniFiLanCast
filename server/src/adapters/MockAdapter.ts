@@ -72,18 +72,18 @@ export class MockAdapter implements NetworkAdapter {
         }
       }
 
-      // Simulate latency spikes
+      // Simulate latency spikes + packet loss as device CONDITIONS only.
+      // Detection/alerting is centralized in HealthMonitor (snapshot layer), so
+      // mock and real adapters produce identical event semantics.
       if (device.online && Math.random() < 0.002) {
         device.latencyMs = 200 + Math.random() * 300;
-        events.push({
-          ts: now,
-          severity: 'warning',
-          type: 'latency_spike',
-          message: `High latency detected on ${device.name}: ${device.latencyMs.toFixed(0)}ms`,
-          relatedIds: [device.id],
-        });
       } else if (device.latencyMs && device.latencyMs > 50) {
-        device.latencyMs = Math.max(1, device.latencyMs * 0.9); // Decay back to normal
+        device.latencyMs = Math.max(1, device.latencyMs * 0.9); // decay back to normal
+      }
+      if (device.online && Math.random() < 0.0015) {
+        device.packetLoss = 0.06 + Math.random() * 0.1; // 6–16% loss
+      } else if (device.packetLoss && device.packetLoss > 0.005) {
+        device.packetLoss = device.packetLoss * 0.8; // decay
       }
 
       device.lastSeen = device.online ? now : device.lastSeen;

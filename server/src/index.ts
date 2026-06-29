@@ -231,6 +231,7 @@ async function main() {
   const dataManager = new DataManager(adapters, {
     retentionMinutes: config.server.historyRetentionMinutes,
     store,
+    healthThresholds: config.health,
   });
 
   // Wire alerting: dispatch qualifying events from each capture to a webhook.

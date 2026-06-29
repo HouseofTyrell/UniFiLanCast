@@ -49,5 +49,11 @@
       "packetLoss": true,
       "wanIssue": true
     }
+  },
+  "health": {
+    "latencyHighMs": 150,
+    "latencyLowMs": 80,
+    "lossHighPct": 0.05,
+    "lossLowPct": 0.02
   }
 }

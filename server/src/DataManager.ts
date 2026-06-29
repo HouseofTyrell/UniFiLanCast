@@ -4,6 +4,7 @@ import { WeatherEngine } from './utils/weatherEngine.js';
 import { Store } from './Store.js';
 import { logger } from './utils/logger.js';
 import { integrateSeries, integrateDeviceUsages } from './utils/usage.js';
+import { HealthMonitor, HealthThresholds } from './HealthMonitor.js';
 import { EventEmitter } from 'events';
 
 export interface DataManagerOptions {
@@ -13,6 +14,8 @@ export interface DataManagerOptions {
   /** Minimum spacing between persisted history snapshots (ms). */
   snapshotIntervalMs?: number;
   store?: Store;
+  /** Thresholds for centralized latency/packet-loss health events. */
+  healthThresholds?: Partial<HealthThresholds>;
 }
 
 /**
@@ -24,6 +27,7 @@ export interface DataManagerOptions {
 export class DataManager extends EventEmitter {
   private adapters: NetworkAdapter[] = [];
   private weatherEngine: WeatherEngine;
+  private healthMonitor: HealthMonitor;
   private store?: Store;
   private retentionMinutes: number;
   private captureIntervalMs: number;
@@ -40,6 +44,7 @@ export class DataManager extends EventEmitter {
     super();
     this.adapters = adapters;
     this.weatherEngine = new WeatherEngine();
+    this.healthMonitor = new HealthMonitor(options.healthThresholds);
     this.store = options.store;
     this.retentionMinutes = options.retentionMinutes ?? 60;
     this.captureIntervalMs = options.captureIntervalMs ?? 5000;
@@ -169,6 +174,11 @@ export class DataManager extends EventEmitter {
   private async doCapture(): Promise<NetworkSnapshot> {
     const started = Date.now();
     const snapshot = await this.buildSnapshot();
+
+    // Centralized health detection (latency/packet-loss, with hysteresis) over
+    // the normalized snapshot — adapter-agnostic. Added before persistence so
+    // these events are stored and dispatched to alerts like any other.
+    snapshot.events.push(...this.healthMonitor.evaluate(snapshot.devices, snapshot.timestamp));
 
     // Durable device inventory + genuine new-device detection (restart-safe).
     if (this.store) {
