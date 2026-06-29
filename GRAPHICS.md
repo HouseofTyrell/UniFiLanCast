@@ -1,5 +1,7 @@
 # UniFiLanCast Graphics Assets
 
+> **Note (current state):** the device nodes in the live constellation are now drawn **programmatically** as monoline glyphs by `drawGlyph()` in `web/src/utils/visualization.ts` (router / switch / AP / client), not loaded from the device SVGs below. The branding assets (logo, app icon) are still used. The device-*.svg files remain as reference/source art.
+
 This document describes the graphics assets implemented for the UniFiLanCast project.
 
 ## Overview

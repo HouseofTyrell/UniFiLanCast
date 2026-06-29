@@ -1,392 +1,160 @@
-# UniFi Network Weather Map
+# UniFiLanCast — Network Weather Map
 
-A real-time network visualization dashboard that displays your UniFi network as an animated "weather map" - where network traffic appears as wind, outages as fog, and performance issues as lightning.
+A real-time, ambient visualization dashboard for your UniFi network. It renders your network as a living **constellation** — gateway on top, switches and access points below, and each device's clients clustered beneath it — animated as a "weather map" where traffic is wind, device load is heat, outages are fog, and latency spikes are lightning.
 
-![Network Weather Map](https://img.shields.io/badge/status-stable-green) ![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue)
+![status](https://img.shields.io/badge/status-active-green) ![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue)
 
-## Features
+> Connects to real UniFi hardware via the **local Network Integration API** (read-only API key). No cloud dependency required.
 
-- **Real-time Visualization**: Live network topology with animated weather effects
-- **Multi-Source Support**: Works with UniFi Site Manager API (cloud) and Local Network API
-- **Weather Effects**:
-  - 🌪️ **Storm/Wind**: High traffic utilization with animated flow particles
-  - 🌫️ **Fog**: Packet loss and offline devices
-  - 🔥 **Heat**: Device load and high traffic
-  - ⚡ **Lightning**: Latency spikes and sudden network events
-- **Interactive Features**:
-  - Hover tooltips with device details
-  - Search by name, IP, or MAC address
-  - Filters (wired/WiFi/issues only)
-  - Live event feed
-- **Time Playback**: Replay last 60 minutes of network history
-- **Mock Mode**: Built-in mock adapter for testing without UniFi hardware
-- **Docker Ready**: Easy deployment via Docker Compose
+---
 
-## Architecture
+## Highlights
 
-```
-┌─────────────────────────────────────────────┐
-│           Frontend (React + Canvas)         │
-│  ┌─────────────────────────────────────┐   │
-│  │  Weather Visualization Engine        │   │
-│  │  - Force-directed layout             │   │
-│  │  - Particle effects                  │   │
-│  │  - Interactive controls              │   │
-│  └─────────────────────────────────────┘   │
-└──────────────────┬──────────────────────────┘
-                   │ SSE/REST
-┌──────────────────▼──────────────────────────┐
-│        Backend (Node + Fastify)             │
-│  ┌─────────────────────────────────────┐   │
-│  │  Data Manager + Weather Engine       │   │
-│  │  - Normalizes adapter data           │   │
-│  │  - Computes weather signals          │   │
-│  │  - In-memory history buffer          │   │
-│  └──────────────┬──────────────────────┘   │
-│                 │                            │
-│  ┌──────────────▼──────────────────────┐   │
-│  │  Pluggable Adapters                  │   │
-│  │  ┌────────────────────────────────┐ │   │
-│  │  │ Mock Adapter (default)         │ │   │
-│  │  │ Site Manager API Adapter       │ │   │
-│  │  │ Local Network API Adapter      │ │   │
-│  │  └────────────────────────────────┘ │   │
-│  └─────────────────────────────────────┘   │
-└─────────────────────────────────────────────┘
-```
+- **Live + historical bandwidth** — per-device download/upload, WAN throughput, and a **data-usage window** (5m / 15m / 30m / 1h / 2h / 8h). The selected window drives the panels *and* the node sizing, so the heaviest users over the window stand out even when momentarily idle.
+- **Tiered + clustered layout** — gateway → switches/APs → each hub's own clients in an organic cluster beneath it; busy devices grow, brighten, and label themselves; idle ones recede.
+- **Per-client detail** — click any node for live rate, windowed usage, session totals, signal, channel, VLAN, vendor (OUI), OS, IP/MAC, connected-since, and experience score.
+- **VLAN coloring** — toggle to color clients by segment, with a per-VLAN throughput/segments panel.
+- **Weather effects** — directional download/upload flow strands, device-load heat glow, offline fog, latency lightning bolts.
+- **Dashboard** — live HUD, WAN trend chart, top talkers, segments, and a live events feed framing the constellation.
+- **Persistence** — SQLite store keeps history, a device inventory with first-seen, and an event log across restarts.
+- **Alerting** — webhook notifications (Discord / Slack / generic) with severity gating + throttling.
+- **Auth** — optional HTTP Basic auth over the whole app.
+- **Mock mode** — runs with simulated devices, no hardware required.
 
-## Quick Start
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how it's built and [NEXT_STEPS.md](NEXT_STEPS.md) for the roadmap.
 
-### Development (Windows or Linux/Mac)
+---
 
-**Prerequisites:**
-- Node.js 18+ (recommended: 20.x)
-- npm or yarn
+## Quick start (development)
 
-**1. Clone and install dependencies:**
+**Prerequisites:** Node.js 18+ (20.x recommended), npm.
 
 ```bash
 git clone https://github.com/HouseofTyrell/UniFiLanCast.git
 cd UniFiLanCast
 npm install
-```
-
-**2. Create configuration file:**
-
-```bash
 cp config.example.json config.json
-```
-
-**3. Start in development mode (mock data):**
-
-```bash
 npm run dev
 ```
 
-This starts:
-- Backend server on `http://localhost:3001`
-- Frontend dev server on `http://localhost:5173`
+- Backend API → `http://localhost:3001`
+- Frontend → `http://localhost:5173`
 
-Open `http://localhost:5173` to view the dashboard.
+Out of the box it runs in **mock mode** (simulated devices). To connect real hardware, see [Connecting to real hardware](#connecting-to-real-hardware).
 
-### Production Deployment (Docker)
-
-**Prerequisites:**
-- Docker and Docker Compose
-
-**1. Create your config file:**
+### Production (Docker)
 
 ```bash
-cp config.example.json config.json
+cp config.example.json config.json   # edit for your network
+docker-compose up -d                  # dashboard on http://localhost:8080
 ```
-
-**2. Edit `config.json` with your UniFi credentials (see Configuration section below)**
-
-**3. Start services:**
-
-```bash
-docker-compose up -d
-```
-
-**4. Access dashboard:**
-
-Open `http://localhost:8080`
-
-The server API is available at `http://localhost:3001/api`
-
-## Configuration
-
-Edit `config.json` to configure data sources:
-
-```json
-{
-  "adapters": {
-    "mock": {
-      "enabled": true,
-      "deviceCount": 30
-    },
-    "siteManager": {
-      "enabled": false,
-      "apiKey": "YOUR_SITE_MANAGER_API_KEY",
-      "pollingInterval": 15000
-    },
-    "localNetwork": {
-      "enabled": false,
-      "baseUrl": "https://192.168.1.1",
-      "username": "YOUR_USERNAME",
-      "password": "YOUR_PASSWORD",
-      "pollingInterval": 5000,
-      "useProxyPrefix": true,
-      "verifySsl": false
-    }
-  },
-  "server": {
-    "port": 3001,
-    "historyRetentionMinutes": 60,
-    "logLevel": "info"
-  }
-}
-```
-
-### Adapter Configuration
-
-#### Mock Adapter (Default)
-- **Purpose**: Testing without UniFi hardware
-- **deviceCount**: Number of simulated devices (default: 30)
-- Generates realistic traffic patterns, random outages, and latency spikes
-
-#### Site Manager API Adapter
-- **Purpose**: Official UniFi cloud API (read-only)
-- **apiKey**: Your Site Manager API key from [account.ui.com](https://account.ui.com)
-- **pollingInterval**: How often to fetch data (milliseconds, default: 15000)
-- **Features**: Device inventory, ISP metrics, basic health
-
-#### Local Network API Adapter
-- **Purpose**: Direct connection to UniFi Network Application
-- **baseUrl**: Your controller URL (e.g., `https://192.168.1.1`)
-- **username/password**: Local admin credentials
-- **useProxyPrefix**: Set to `true` for UniFi OS consoles (UDM/UCG), `false` for classic controllers
-- **verifySsl**: Set to `false` for self-signed certificates
-- **pollingInterval**: How often to fetch data (milliseconds, default: 5000)
-- **Features**: Full device inventory, active clients, traffic stats, health metrics
-
-### Using Multiple Adapters
-
-You can enable multiple adapters simultaneously. The system will merge data intelligently:
-
-```json
-{
-  "adapters": {
-    "mock": {
-      "enabled": false
-    },
-    "siteManager": {
-      "enabled": true,
-      "apiKey": "your-key"
-    },
-    "localNetwork": {
-      "enabled": true,
-      "baseUrl": "https://192.168.1.1",
-      "username": "admin",
-      "password": "password"
-    }
-  }
-}
-```
-
-## API Reference
-
-### REST Endpoints
-
-**GET /api/snapshot**
-- Returns current network state
-- Response: `NetworkSnapshot` object with devices, links, events, and weather signals
-
-**GET /api/history?minutes=60**
-- Returns historical network samples
-- Query params: `minutes` (default: 60)
-- Response: Array of `HistorySample` objects
-
-**GET /api/status**
-- Returns adapter connection status
-- Response: Array of `AdapterStatus` objects
-
-**GET /api/stream**
-- Server-Sent Events stream for live updates
-- Emits `NetworkSnapshot` on each update (~every 5 seconds)
-
-## Project Structure
-
-```
-UniFiLanCast/
-├── server/                    # Backend (Node + TypeScript)
-│   ├── src/
-│   │   ├── adapters/         # Data source adapters
-│   │   │   ├── MockAdapter.ts
-│   │   │   ├── SiteManagerAdapter.ts
-│   │   │   └── LocalNetworkAdapter.ts
-│   │   ├── models/           # Data models
-│   │   │   ├── types.ts
-│   │   │   └── adapter.ts
-│   │   ├── routes/           # API routes
-│   │   │   └── api.ts
-│   │   ├── utils/            # Utilities
-│   │   │   ├── weatherEngine.ts
-│   │   │   └── logger.ts
-│   │   ├── DataManager.ts    # Central data coordinator
-│   │   └── index.ts          # Entry point
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── Dockerfile
-├── web/                       # Frontend (React + Vite)
-│   ├── src/
-│   │   ├── components/       # UI components
-│   │   │   ├── NetworkCanvas.tsx
-│   │   │   ├── Controls.tsx
-│   │   │   └── TimePlayback.tsx
-│   │   ├── hooks/            # React hooks
-│   │   │   └── useNetworkData.ts
-│   │   ├── types/            # TypeScript types
-│   │   │   └── index.ts
-│   │   ├── utils/            # Utilities
-│   │   │   └── visualization.ts
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── Dockerfile
-├── config.example.json        # Example configuration
-├── docker-compose.yml
-├── package.json               # Workspace root
-└── README.md
-```
-
-## Development
-
-### Running Tests
-
-```bash
-# Backend
-cd server
-npm test
-
-# Frontend
-cd web
-npm test
-```
-
-### Building
-
-```bash
-# Build all
-npm run build
-
-# Build backend only
-npm run build:server
-
-# Build frontend only
-npm run build:web
-```
-
-### Linting
-
-```bash
-cd server && npm run lint
-cd web && npm run lint
-```
-
-## Troubleshooting
-
-### "Connection lost" error
-- Check that the backend server is running
-- Verify firewall settings allow connections to port 3001
-- Check browser console for CORS errors
-
-### No devices appearing
-- Verify adapter configuration in `config.json`
-- Check adapter status in the UI (should show green)
-- Review server logs for authentication errors
-- If using Local Network adapter, ensure credentials are correct
-
-### Self-signed certificate errors (Local Network)
-- Set `"verifySsl": false` in config.json
-- For UniFi OS consoles, ensure `"useProxyPrefix": true`
-
-### Rate limiting from UniFi API
-- Increase `pollingInterval` in config.json
-- Site Manager API: Use 15000ms or higher
-- Local Network API: Use 5000ms or higher
-
-## Performance Tuning
-
-### Backend
-- Adjust `historyRetentionMinutes` to control memory usage
-- Increase `pollingInterval` to reduce API calls
-- Set `logLevel` to `"warn"` in production
-
-### Frontend
-- The canvas rendering is capped at 60 FPS
-- Particle effects are automatically throttled based on device count
-- Use filters to reduce visible nodes for better performance
-
-## Security Notes
-
-- **Never commit `config.json`** - It's in `.gitignore` by default
-- Store credentials as environment variables in production:
-  ```bash
-  SITE_MANAGER_API_KEY=your-key
-  LOCAL_UNIFI_USERNAME=admin
-  LOCAL_UNIFI_PASSWORD=password
-  ```
-- Use read-only API keys where possible
-- Enable SSL verification (`verifySsl: true`) when using trusted certificates
-- Run behind a reverse proxy (nginx/Caddy) for HTTPS in production
-
-## Next Steps & Future Enhancements
-
-### Planned Features
-1. **Top Talkers Dashboard**: Show devices with highest bandwidth usage
-2. **Per-Port Statistics**: Detailed switch port utilization graphs
-3. **Alert Integration**: Send notifications to Discord/Slack/email
-4. **Advanced Analytics**:
-   - Bandwidth trending over time
-   - Device uptime statistics
-   - Client connection history
-5. **Custom Weather Rules**: User-defined thresholds for weather effects
-6. **Export Features**:
-   - Screenshot network map
-   - Export metrics to CSV/JSON
-   - Generate PDF reports
-7. **Mobile App**: React Native companion app
-8. **Multi-Site Support**: Visualize multiple UniFi sites simultaneously
-9. **VLANs Visualization**: Color-code devices by VLAN
-10. **Guest Network Detection**: Highlight guest devices
-11. **Speedtest Integration**: Show WAN bandwidth over time
-12. **Device Groups**: Custom grouping and labeling
-
-### Contributing
-Pull requests welcome! Please ensure:
-- TypeScript strict mode compliance
-- Tests for new features
-- Updated documentation
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Acknowledgments
-
-- Built with [Fastify](https://www.fastify.io/) and [React](https://react.dev/)
-- Inspired by traditional weather maps and network monitoring tools
-- UniFi is a trademark of Ubiquiti Inc.
-
-## Support
-
-For issues, questions, or feature requests:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Review server logs for detailed error messages
 
 ---
 
-**Enjoy your Network Weather Map!** 🌦️📡
+## Connecting to real hardware
+
+UniFiLanCast talks to your controller through the **local UniFi Network Integration API** using an API key.
+
+1. Open the **UniFi Network application** (e.g. `https://10.0.0.1`) → **Settings → Control Plane → Integrations** → **Create API Key**. Copy it.
+   - ⚠️ This is a *local Network* key, distinct from a `unifi.ui.com` cloud/account key. A cloud key returns `401` against the local `/proxy/network/integration/v1` API. See [unifi-integration-api-vs-cloud-key](#) notes in `ARCHITECTURE.md`.
+2. Provide the key via the env var named in config (default `UNIFI_API_KEY`). The server auto-loads a gitignored `.env`:
+   ```bash
+   echo "UNIFI_API_KEY=your-key-here" > .env
+   ```
+3. Enable the adapter in `config.json`:
+   ```json
+   "integrationApi": { "enabled": true, "baseUrl": "https://10.0.0.1", "apiKeyEnv": "UNIFI_API_KEY", "verifySsl": false }
+   ```
+4. Restart (`npm run dev`). The same key also authenticates the legacy `stat/sta` endpoint, which the adapter uses to enrich **per-client** traffic, signal, VLAN, vendor, and totals.
+
+The machine running the server must be able to reach the controller on the LAN.
+
+---
+
+## Configuration
+
+Edit `config.json` (copied from `config.example.json`). Secrets should come from environment variables, not the file.
+
+| Section | Key | Notes |
+|---|---|---|
+| `adapters.integrationApi` | `enabled`, `baseUrl`, `apiKey` / `apiKeyEnv`, `siteId?`, `pollingInterval?`, `verifySsl?` | **Recommended.** Local Integration API + per-client enrichment. |
+| `adapters.mock` | `enabled`, `deviceCount` | Simulated devices, no hardware. |
+| `adapters.siteManager` | `enabled`, `apiKey`, `pollingInterval` | UniFi cloud Site Manager API (inventory only — no per-client traffic). |
+| `adapters.localNetwork` | `enabled`, `baseUrl`, `username`, `password`, … | Legacy username/password local API. |
+| `server` | `port`, `historyRetentionMinutes` (default 1440), `logLevel`, `dataDir?` | SQLite store lives in `dataDir` (default `<repo>/data`). |
+| `auth` | `enabled`, `username`, `password` / `passwordEnv` | Optional HTTP Basic auth over API + UI. Disabled by default. |
+| `alerts` | `enabled`, `webhookUrl` / `webhookEnv`, `format` (`auto`/`discord`/`slack`/`json`), `throttleSeconds`, `minSeverity`, `rules` | Webhook alerts. Disabled by default. |
+
+### Environment variables
+
+| Var | Purpose |
+|---|---|
+| `UNIFI_API_KEY` | Integration API key (default name; override with `apiKeyEnv`). |
+| `UNIFI_ALERT_WEBHOOK` | Alert webhook URL (default name; override with `webhookEnv`). |
+| `UNIFI_AUTH_PASSWORD` | Basic-auth password (default name; override with `passwordEnv`). |
+| `CONFIG_PATH` | Explicit path to `config.json` (otherwise auto-discovered up the tree). |
+| `DATA_DIR` | Override the SQLite data directory. |
+| `LOG_LEVEL`, `NODE_ENV` | Logging / production static-file serving. |
+
+`.env` (gitignored) is auto-loaded at startup, and `config.json` is found whether the server runs from the repo root or `server/`.
+
+---
+
+## API reference
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/snapshot` | Current network state (devices, links, events, weather). |
+| `GET /api/stream` | Server-Sent Events stream of snapshots (~5s). |
+| `GET /api/history?minutes=N` | Persisted history samples. |
+| `GET /api/usage?minutes=N[&deviceId=ID]` | Total data down/up over the window (WAN, or a specific device) + a downsampled series. |
+| `GET /api/usage/devices?minutes=N` | Per-device data usage over the window (drives node sizing). |
+| `GET /api/status` | Adapter connection status. |
+| `GET /api/config` · `POST /api/config` | Read / write the configuration file. |
+
+All rates are normalized to **bits/sec** internally; volumes are reported in **bytes**. (Note: the Integration API reports device rates in bits/sec, but the legacy `stat/sta` client fields are bytes/sec — the adapter reconciles these. For clients, the controller's `tx_bytes` is *download*, the reverse of the gateway convention; the adapter swaps it so "↓ = download" everywhere.)
+
+---
+
+## Project layout
+
+```
+server/   Node + Fastify + TypeScript
+  src/
+    adapters/        MockAdapter, IntegrationApiAdapter, SiteManagerAdapter, LocalNetworkAdapter
+    DataManager.ts   capture loop, snapshots, usage integration
+    Store.ts         SQLite persistence (history, devices, events)
+    AlertManager.ts  webhook alerting
+    routes/api.ts    REST + SSE
+    utils/weatherEngine.ts
+web/      React + Vite + HTML5 canvas
+  src/
+    utils/visualization.ts   the constellation renderer (layout, nodes, links, weather)
+    components/              Header, NetworkCanvas, DeviceDetail, WanChart, Segments, TopTalkers, Events, Legend, Controls, TimePlayback
+    hooks/                  useNetworkData (SSE), useRollingData, useDeviceUsages
+```
+
+---
+
+## Development
+
+```bash
+npm run build          # build server + web
+npm run build:server   # tsc
+npm run build:web      # tsc + vite build
+cd server && npm run lint
+```
+
+> ⚠️ There is currently no automated test suite — see [NEXT_STEPS.md](NEXT_STEPS.md). Contributions welcome (TypeScript strict mode; keep server and web type definitions in sync).
+
+---
+
+## Security notes
+
+- `auth.enabled` is **off by default** — enable it (and run behind a reverse proxy with HTTPS) before exposing the dashboard beyond a trusted LAN.
+- Never commit `config.json` or `.env` (both gitignored). Use a read-only API key.
+- `verifySsl: false` skips TLS verification for self-signed controller certs.
+
+## License
+
+MIT — see [LICENSE](LICENSE). UniFi is a trademark of Ubiquiti Inc.
