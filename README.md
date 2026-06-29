@@ -49,6 +49,8 @@ cp config.example.json config.json   # edit for your network
 docker-compose up -d                  # dashboard on http://localhost:8080
 ```
 
+> The server binds **`127.0.0.1` by default** and refuses to start LAN-exposed without auth (fail-closed). To reach it from other hosts (including across a Docker bridge), set `server.host: "0.0.0.0"` in `config.json` **and** enable `auth`.
+
 ---
 
 ## Connecting to real hardware
@@ -151,9 +153,10 @@ cd server && npm run lint
 
 ## Security notes
 
-- `auth.enabled` is **off by default** — enable it (and run behind a reverse proxy with HTTPS) before exposing the dashboard beyond a trusted LAN.
-- Never commit `config.json` or `.env` (both gitignored). Use a read-only API key.
-- `verifySsl: false` skips TLS verification for self-signed controller certs.
+- The server **binds `127.0.0.1` by default** and **refuses to start LAN-exposed (`server.host`) with `auth.enabled: false`** — a fail-closed default. To expose it, set `server.host: "0.0.0.0"` and enable auth (ideally behind a reverse proxy with HTTPS).
+- `GET /api/config` **redacts secrets**; `POST /api/config` validates input and writes atomically. Still, gate the app behind auth before exposing it.
+- `verifySsl` **defaults to `true`** — set it to `false` explicitly (or pin a CA) for a controller's self-signed cert.
+- Never commit `config.json` or `.env` (both gitignored). Use a read-only API key, sourced from an env var.
 
 ## License
 

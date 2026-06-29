@@ -35,16 +35,26 @@ Where UniFiLanCast is and where it's going. **Check the "Shipped" list before bu
 
 ## 🧹 Tech debt
 
-> This list is being refreshed by a full multi-dimension code review (architecture, correctness, security, performance, quality). High-value items will be folded in here as they're triaged.
+A full multi-dimension code review (architecture, correctness, security, performance, quality) was run; findings were adversarially verified against the code. Status below.
 
-Known going in:
-- [ ] **No automated tests** — add Vitest (web) + a backend test runner; cover the rate→bytes integration, the adapter unit reconciliation, and layout math.
-- [ ] **Duplicated type definitions** between `server/src/models/types.ts` and `web/src/types/index.ts` — risk of drift; consider a shared package.
+### ✅ Addressed (commit `b803223`)
+- **Security defaults** — bind `127.0.0.1` by default + fail-closed when LAN-exposed without auth (SEC-1); harden/validate/atomic `POST /api/config` (SEC-2); redact secrets from `GET /api/config` (SEC-3); restrict CORS (SEC-4); default `verifySsl: true` (SEC-5); clamp `/api/history` input (SEC-8).
+- **Correctness** — AlertManager throttles only on successful delivery (COR-1); SSE reconnect timer cleanup (COR-5); bounded event-dedupe set (COR-8); `usageLevel` range guard (COR-7).
+- **Performance/rendering** — `devicePixelRatio` applied, fixing blurry Retina canvas (PERF-1); SSE serialize-once (PERF-6); `getDeviceUsages` map reuse (PERF-7); single long-lived rAF loop (PERF-8).
+
+### ⏳ Remaining (prioritized)
+- [ ] **No automated tests** — add Vitest (web) + a backend runner; cover rate→bytes integration, adapter unit reconciliation, layout math.
+- [ ] **Usage-integration cadence** — store (30s) vs in-memory (5s) sampling diverge; `dt>180s` gaps silently dropped → under-counted totals. Make cadence explicit/consistent; clamp rather than drop gaps (COR-3).
+- [ ] **`fetchData` drops events captured between polls** when capture cadence < poll cadence — buffer & drain, or validate the config combination (COR-2).
+- [ ] **Client rate/counter unit ambiguity** for clients with no legacy match — always set `rxBytes/txBytes` to rates, keep cumulative in totals (COR-4).
+- [ ] **Vanished devices never marked offline** + O(n²) device lookup in `recordStateChange` (COR-6); pagination dedupe (COR-9); `assoc_time` via `toMs` (COR-10).
+- [ ] **`getHistory` re-parses all snapshots per usage request** — add a narrow `device_samples` table / SQL projection, or cache parsed history (PERF-2/3).
+- [ ] **Per-frame full layout recompute + allocations** — gate `computeRadialTargets` on a topology/size signature; reuse scratch buffers (PERF-4/5).
+- [ ] **Duplicated type definitions** between `server/src/models/types.ts` and `web/src/types/index.ts` — shared package to prevent drift.
 - [ ] **`visualization.ts` is a ~950-line god-module** — split layout / rendering / weather / hit-testing.
-- [ ] **`getHistory` re-parses all snapshots per usage request** — cache or push aggregation into SQL.
-- [ ] **No config schema validation** — validate `config.json` on load (zod) with clear errors.
-- [ ] **CI/CD** — GitHub Actions for build + lint + tests; automated Docker builds.
-- [ ] **API docs** — OpenAPI/Swagger for the REST surface.
+- [ ] **No config schema validation on load** — validate `config.json` at startup (zod) with clear errors.
+- [ ] **Webhook SSRF hardening** (block private targets) (SEC-6); normalize `CONFIG_PATH`/`DATA_DIR` (SEC-7).
+- [ ] **CI/CD** — GitHub Actions (build + lint + tests); automated Docker builds. **API docs** — OpenAPI/Swagger.
 
 ---
 
