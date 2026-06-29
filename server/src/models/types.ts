@@ -147,6 +147,12 @@ export interface Config {
     logLevel: string;
     /** Directory for the SQLite store (default: <repo>/data). */
     dataDir?: string;
+    /**
+     * Interface to bind. Defaults to 127.0.0.1 (loopback only). Set to
+     * '0.0.0.0' to expose on the LAN — strongly recommended only with
+     * auth.enabled = true.
+     */
+    host?: string;
   };
   auth?: {
     enabled: boolean;

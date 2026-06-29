@@ -47,6 +47,11 @@ export class NetworkVisualization {
   private selectedId: string | null = null;
   private colorMode: ColorMode = 'type';
   private animationFrame = 0;
+  // Logical (CSS-pixel) drawing size. The backing buffer is this × devicePixelRatio
+  // for crisp HiDPI rendering; all layout/draw math uses these logical dimensions.
+  private cssW = 0;
+  private cssH = 0;
+  private dpr = 1;
 
   // Radial-tree layout geometry (computed each frame).
   private layoutCx = 0;
@@ -129,9 +134,11 @@ export class NetworkVisualization {
     if (bytes <= 0) return 0;
     const max = device.type === 'client' ? this.maxClientUsage : this.maxInfraUsage;
     if (max <= 0) return 0;
-    const lo = Math.log10(Math.max(1e5, max * 0.003));
     const hi = Math.log10(max);
-    return Math.max(0, Math.min(1, (Math.log10(bytes) - lo) / Math.max(0.001, hi - lo)));
+    // Span ~2.5 decades below the busiest device, but always keep a real range
+    // so a small max doesn't collapse every node to idle (lo must stay < hi).
+    const lo = Math.min(hi - 0.5, Math.log10(Math.max(1, max * 0.003)));
+    return Math.max(0, Math.min(1, (Math.log10(bytes) - lo) / (hi - lo)));
   }
 
   /**
@@ -154,11 +161,14 @@ export class NetworkVisualization {
   }
 
   resize() {
-    // Size the drawing buffer to the canvas's CSS box (the stage column),
-    // accounting for device pixel ratio for crisp rendering.
+    // Size the backing buffer to the CSS box × devicePixelRatio so rendering is
+    // crisp on HiDPI/Retina displays. Layout math uses the logical CSS size.
     const rect = this.canvas.getBoundingClientRect();
-    this.canvas.width = Math.max(1, Math.round(rect.width));
-    this.canvas.height = Math.max(1, Math.round(rect.height));
+    this.dpr = window.devicePixelRatio || 1;
+    this.cssW = Math.max(1, Math.round(rect.width));
+    this.cssH = Math.max(1, Math.round(rect.height));
+    this.canvas.width = Math.max(1, Math.round(this.cssW * this.dpr));
+    this.canvas.height = Math.max(1, Math.round(this.cssH * this.dpr));
   }
 
   updateLayout(devices: Device[], _links: Link[]) {
@@ -216,10 +226,10 @@ export class NetworkVisualization {
     // The canvas is now the centered stage between the rails, so a uniform fit
     // (no anisotropic stretch) keeps the constellation circular and composed.
     const pad = 28;
-    const cx = this.canvas.width / 2;
-    const cy = this.canvas.height / 2;
-    const halfW = this.canvas.width / 2 - pad;
-    const halfH = this.canvas.height / 2 - pad;
+    const cx = this.cssW / 2;
+    const cy = this.cssH / 2;
+    const halfW = this.cssW / 2 - pad;
+    const halfH = this.cssH / 2 - pad;
     return { cx, cy, maxR: Math.min(halfW, halfH), halfW, halfH };
   }
 
@@ -233,8 +243,8 @@ export class NetworkVisualization {
     devices: Device[],
     _box: { cx: number; cy: number; maxR: number; halfW: number; halfH: number }
   ) {
-    const W = this.canvas.width;
-    const H = this.canvas.height;
+    const W = this.cssW;
+    const H = this.cssH;
     const padX = 48;
     const left = padX;
     const usableW = Math.max(1, W - padX * 2);
@@ -337,6 +347,10 @@ export class NetworkVisualization {
   ) {
     this.animationFrame++;
 
+    // Map logical (CSS-px) coordinates onto the HiDPI backing buffer so all
+    // drawing below works in CSS pixels and renders crisply on Retina.
+    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+
     // Filter devices
     const filteredDevices = this.applyFilter(devices, filter);
     const filteredDeviceIds = new Set(filteredDevices.map(d => d.id));
@@ -398,8 +412,8 @@ export class NetworkVisualization {
 
   private drawBackground() {
     const { ctx } = this;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const w = this.cssW;
+    const h = this.cssH;
     const cx = this.layoutCx || w / 2;
     const cy = this.layoutCy || h / 2;
     const maxR = this.ringRadii.length ? this.ringRadii[this.ringRadii.length - 1] : Math.min(w, h) / 2;
@@ -716,9 +730,9 @@ export class NetworkVisualization {
 
     let x = node.x + node.radius + 12;
     let y = node.y - height / 2;
-    if (x + width > this.canvas.width) x = node.x - node.radius - width - 12;
+    if (x + width > this.cssW) x = node.x - node.radius - width - 12;
     if (y < 76) y = 76;
-    if (y + height > this.canvas.height) y = this.canvas.height - height - 8;
+    if (y + height > this.cssH) y = this.cssH - height - 8;
 
     // Glass panel with a colored top edge.
     this.roundRect(x, y, width, height, 10);

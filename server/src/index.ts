@@ -164,9 +164,18 @@ async function main() {
     logger: false, // Using pino directly
   });
 
-  // Register CORS
+  // Register CORS. The UI is served same-origin (and proxied in dev), so we
+  // only need to allow same-origin/non-browser callers plus localhost dev
+  // origins — never reflect arbitrary origins back (guards against a hostile
+  // page scripting the API when the server is LAN-exposed).
   await fastify.register(cors, {
-    origin: true,
+    origin: (origin, cb) => {
+      if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        cb(null, true);
+        return;
+      }
+      cb(null, false);
+    },
   });
 
   // Optional HTTP Basic auth over everything (API, SSE, static).
@@ -267,9 +276,19 @@ async function main() {
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
 
-  // Start server
+  // Start server. Bind loopback by default; only expose on the LAN when the
+  // operator explicitly sets server.host. Refuse to start LAN-exposed without
+  // auth (fail-closed) — mirrors the existing auth-misconfig exit above.
   const port = config.server.port;
-  const host = '0.0.0.0';
+  const host = config.server.host || '127.0.0.1';
+  const isLoopback = host === '127.0.0.1' || host === '::1' || host === 'localhost';
+  if (!isLoopback && !config.auth?.enabled) {
+    logger.error(
+      `Refusing to start: server.host is "${host}" (LAN-exposed) but auth.enabled is false. ` +
+        'Enable auth or bind 127.0.0.1.'
+    );
+    process.exit(1);
+  }
 
   try {
     await fastify.listen({ port, host });

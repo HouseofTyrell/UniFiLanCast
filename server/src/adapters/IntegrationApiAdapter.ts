@@ -78,7 +78,9 @@ export class IntegrationApiAdapter implements NetworkAdapter {
         Accept: 'application/json',
       },
       httpsAgent: new https.Agent({
-        rejectUnauthorized: config.verifySsl ?? false,
+        // Verify by default; UniFi gateways ship self-signed certs, so set
+        // verifySsl:false explicitly (or pin a CA) to connect to one.
+        rejectUnauthorized: config.verifySsl ?? true,
       }),
     });
   }

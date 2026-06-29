@@ -1,10 +1,42 @@
 import { FastifyInstance } from 'fastify';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, rename } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { DataManager } from '../DataManager.js';
 import { logger } from '../utils/logger.js';
 import { Config } from '../models/types.js';
+
+/** Mask a secret-bearing string so the value never leaves the server. */
+function maskSecret(v: unknown): unknown {
+  return typeof v === 'string' && v.length > 0 ? '********' : v;
+}
+
+/** Deep-clone config and redact every secret field before returning it. */
+function redactConfig(config: any): any {
+  const c = JSON.parse(JSON.stringify(config ?? {}));
+  const a = c.adapters || {};
+  if (a.siteManager) a.siteManager.apiKey = maskSecret(a.siteManager.apiKey);
+  if (a.integrationApi) a.integrationApi.apiKey = maskSecret(a.integrationApi.apiKey);
+  if (a.localNetwork) {
+    a.localNetwork.password = maskSecret(a.localNetwork.password);
+    a.localNetwork.username = maskSecret(a.localNetwork.username);
+  }
+  if (c.auth) c.auth.password = maskSecret(c.auth.password);
+  if (c.alerts) c.alerts.webhookUrl = maskSecret(c.alerts.webhookUrl);
+  return c;
+}
+
+/** Minimal runtime validation for a posted config (types are compile-time only). */
+function validateConfig(body: unknown): string | null {
+  if (!body || typeof body !== 'object') return 'Body must be a JSON object';
+  const c = body as any;
+  if (!c.adapters || typeof c.adapters !== 'object') return 'Missing or invalid "adapters"';
+  if (!c.server || typeof c.server !== 'object') return 'Missing or invalid "server"';
+  if (c.server.port !== undefined && typeof c.server.port !== 'number') return '"server.port" must be a number';
+  if (c.auth !== undefined && typeof c.auth !== 'object') return '"auth" must be an object';
+  if (c.alerts !== undefined && typeof c.alerts !== 'object') return '"alerts" must be an object';
+  return null;
+}
 
 /**
  * Register API routes
@@ -33,7 +65,7 @@ export async function registerApiRoutes(
     Querystring: { minutes?: string };
   }>('/api/history', async (request, reply) => {
     try {
-      const minutes = parseInt(request.query.minutes || '60', 10);
+      const minutes = Math.max(1, Math.min(1440, parseInt(request.query.minutes || '60', 10) || 60));
       const history = dataManager.getHistory(minutes);
       return history;
     } catch (error) {
@@ -88,6 +120,18 @@ export async function registerApiRoutes(
   /**
    * GET /api/stream - Server-Sent Events stream for live updates
    */
+  // Serialize each snapshot once and share the payload across all connected
+  // clients (rather than re-stringifying the same object per client per tick).
+  let cachedSnap: unknown = null;
+  let cachedPayload = '';
+  const serialize = (snapshot: unknown) => {
+    if (snapshot !== cachedSnap) {
+      cachedSnap = snapshot;
+      cachedPayload = `data: ${JSON.stringify(snapshot)}\n\n`;
+    }
+    return cachedPayload;
+  };
+
   fastify.get('/api/stream', async (request, reply) => {
     reply.raw.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -97,8 +141,7 @@ export async function registerApiRoutes(
 
     // Send initial snapshot
     try {
-      const snapshot = await dataManager.getSnapshot();
-      reply.raw.write(`data: ${JSON.stringify(snapshot)}\n\n`);
+      reply.raw.write(serialize(await dataManager.getSnapshot()));
     } catch (error) {
       logger.error({ error }, 'Failed to send initial snapshot');
     }
@@ -106,8 +149,7 @@ export async function registerApiRoutes(
     // Set up listener for updates
     const updateListener = async () => {
       try {
-        const snapshot = await dataManager.getSnapshot();
-        reply.raw.write(`data: ${JSON.stringify(snapshot)}\n\n`);
+        reply.raw.write(serialize(await dataManager.getSnapshot()));
       } catch (error) {
         logger.error({ error }, 'Failed to send update');
       }
@@ -161,7 +203,7 @@ export async function registerApiRoutes(
       }
 
       const configData = await readFile(configPath, 'utf-8');
-      return JSON.parse(configData);
+      return redactConfig(JSON.parse(configData));
     } catch (error) {
       logger.error({ error }, 'Failed to read config');
       reply.code(500).send({ error: 'Failed to read configuration' });
@@ -176,16 +218,39 @@ export async function registerApiRoutes(
   }>('/api/config', async (request, reply) => {
     try {
       const configPath = process.env.CONFIG_PATH || join(process.cwd(), 'config.json');
-      const config = request.body;
+      const config = request.body as any;
 
-      // Validate config structure
-      if (!config.adapters || !config.server) {
-        reply.code(400).send({ error: 'Invalid configuration structure' });
+      const error = validateConfig(config);
+      if (error) {
+        reply.code(400).send({ error });
         return;
       }
 
-      // Write config to file
-      await writeFile(configPath, JSON.stringify(config, null, 2), 'utf-8');
+      // The UI receives a redacted config; if a secret comes back still masked,
+      // preserve the real value from disk instead of clobbering it with the mask.
+      if (existsSync(configPath)) {
+        try {
+          const existing = JSON.parse(await readFile(configPath, 'utf-8'));
+          const restore = (objNew: any, objOld: any, key: string) => {
+            if (objNew && objOld && objNew[key] === '********') objNew[key] = objOld[key];
+          };
+          const an = config.adapters || {};
+          const ao = existing.adapters || {};
+          restore(an.siteManager, ao.siteManager, 'apiKey');
+          restore(an.integrationApi, ao.integrationApi, 'apiKey');
+          restore(an.localNetwork, ao.localNetwork, 'password');
+          restore(an.localNetwork, ao.localNetwork, 'username');
+          restore(config.auth, existing.auth, 'password');
+          restore(config.alerts, existing.alerts, 'webhookUrl');
+        } catch {
+          /* fall through with posted values */
+        }
+      }
+
+      // Atomic write: temp file + rename so a crash can't truncate config.json.
+      const tmp = `${configPath}.tmp`;
+      await writeFile(tmp, JSON.stringify(config, null, 2), 'utf-8');
+      await rename(tmp, configPath);
 
       logger.info('Configuration saved successfully');
       return { success: true, message: 'Configuration saved. Restart server to apply changes.' };

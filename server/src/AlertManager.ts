@@ -76,9 +76,10 @@ export class AlertManager {
     const now = Date.now();
     for (const event of events) {
       if (!this.shouldAlert(event, now)) continue;
-      const key = this.dedupeKey(event);
-      this.lastSent.set(key, now);
-      await this.dispatch(event);
+      // Only start the throttle window once delivery actually succeeds —
+      // otherwise a webhook outage silently suppresses every retry.
+      const ok = await this.dispatch(event);
+      if (ok) this.lastSent.set(this.dedupeKey(event), now);
     }
   }
 
@@ -104,8 +105,9 @@ export class AlertManager {
     return 'json';
   }
 
-  private async dispatch(event: NetworkEvent): Promise<void> {
-    if (!this.webhookUrl) return;
+  /** Dispatch one alert. Returns true only on confirmed successful delivery. */
+  private async dispatch(event: NetworkEvent): Promise<boolean> {
+    if (!this.webhookUrl) return false;
     const text = `${this.icon(event.severity)} ${event.message}`;
 
     let body: unknown;
@@ -128,11 +130,13 @@ export class AlertManager {
       });
       if (!res.ok) {
         logger.warn({ status: res.status }, 'Alert webhook returned non-OK');
-      } else {
-        logger.info({ type: event.type }, 'Alert dispatched');
+        return false;
       }
+      logger.info({ type: event.type }, 'Alert dispatched');
+      return true;
     } catch (error) {
       logger.error({ error }, 'Failed to dispatch alert');
+      return false;
     }
   }
 

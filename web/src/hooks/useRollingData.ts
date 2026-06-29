@@ -33,6 +33,10 @@ export function useRollingData(snapshot: NetworkSnapshot | null) {
       seen.current.add(key);
       return true;
     });
+    // Bound the dedupe set — events older than the feed window can't reappear.
+    if (seen.current.size > MAX_EVENTS * 8) {
+      seen.current = new Set(Array.from(seen.current).slice(-MAX_EVENTS * 4));
+    }
     if (fresh.length) {
       setEvents(prev => {
         const next = [...fresh.reverse(), ...prev];

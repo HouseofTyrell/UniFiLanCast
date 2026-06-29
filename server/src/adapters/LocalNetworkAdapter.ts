@@ -39,7 +39,8 @@ export class LocalNetworkAdapter implements NetworkAdapter {
       baseURL: config.baseUrl,
       timeout: 10000,
       httpsAgent: new https.Agent({
-        rejectUnauthorized: config.verifySsl ?? false,
+        // Verify by default; set verifySsl:false explicitly for self-signed certs.
+        rejectUnauthorized: config.verifySsl ?? true,
       }),
     });
   }

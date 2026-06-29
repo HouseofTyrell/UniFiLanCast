@@ -18,6 +18,13 @@ export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMod
   const animationFrameRef = useRef<number | null>(null);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  // Feed the latest snapshot/filter to the single long-lived rAF loop via refs,
+  // so the loop isn't torn down and recreated (capturing a stale snapshot) on
+  // every SSE update.
+  const snapshotRef = useRef(snapshot);
+  snapshotRef.current = snapshot;
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -52,6 +59,16 @@ export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMod
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('click', handleClick);
 
+    // One long-lived render loop; reads the latest snapshot/filter from refs.
+    const animate = () => {
+      const snap = snapshotRef.current;
+      if (snap) {
+        visualization.render(snap.devices, snap.links, snap.weather, filterRef.current);
+      }
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+    animate();
+
     return () => {
       window.removeEventListener('resize', handleResize);
       canvas.removeEventListener('mousemove', handleMouseMove);
@@ -74,30 +91,6 @@ export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMod
   useEffect(() => {
     visualizationRef.current?.setUsageMap(usageMap);
   }, [usageMap]);
-
-  useEffect(() => {
-    if (!visualizationRef.current || !snapshot) return;
-
-    const animate = () => {
-      if (visualizationRef.current && snapshot) {
-        visualizationRef.current.render(
-          snapshot.devices,
-          snapshot.links,
-          snapshot.weather,
-          filter
-        );
-      }
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, [snapshot, filter]);
 
   return (
     <canvas

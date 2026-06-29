@@ -8,10 +8,16 @@ export function useNetworkData() {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     // Connect to SSE stream
     const connectStream = () => {
+      if (cancelled) return;
+      // Close any prior connection before opening a new one.
+      eventSourceRef.current?.close();
       const es = new EventSource('/api/stream');
 
       es.onopen = () => {
@@ -29,12 +35,13 @@ export function useNetworkData() {
       };
 
       es.onerror = () => {
+        if (cancelled) return;
         setIsConnected(false);
         setError('Connection lost. Reconnecting...');
         es.close();
 
-        // Reconnect after 5 seconds
-        setTimeout(connectStream, 5000);
+        // Reconnect after 5 seconds (tracked so unmount can cancel it).
+        reconnectRef.current = setTimeout(connectStream, 5000);
       };
 
       eventSourceRef.current = es;
@@ -58,6 +65,8 @@ export function useNetworkData() {
     }, 10000);
 
     return () => {
+      cancelled = true;
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
       }

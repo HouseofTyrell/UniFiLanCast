@@ -154,17 +154,22 @@ export class DataManager extends EventEmitter {
   getDeviceUsages(minutes: number): Record<string, { down: number; up: number }> {
     const samples = this.getHistory(minutes);
     const totals: Record<string, { down: number; up: number }> = {};
+    // Carry the previous sample's index across iterations instead of rebuilding
+    // a Map every step.
+    let prev = samples.length ? new Map(samples[0].devices.map(d => [d.id, d])) : new Map();
     for (let i = 1; i < samples.length; i++) {
       const dt = (samples[i].timestamp - samples[i - 1].timestamp) / 1000;
-      if (dt <= 0 || dt > 180) continue;
-      const prev = new Map(samples[i - 1].devices.map(d => [d.id, d]));
-      for (const d of samples[i].devices) {
-        const p = prev.get(d.id);
-        if (!p) continue;
-        const t = totals[d.id] || (totals[d.id] = { down: 0, up: 0 });
-        t.down += (((p.rxBytes ?? 0) + (d.rxBytes ?? 0)) / 2) * dt / 8;
-        t.up += (((p.txBytes ?? 0) + (d.txBytes ?? 0)) / 2) * dt / 8;
+      const cur = new Map(samples[i].devices.map(d => [d.id, d]));
+      if (dt > 0 && dt <= 180) {
+        for (const [id, d] of cur) {
+          const p = prev.get(id);
+          if (!p) continue;
+          const t = totals[id] || (totals[id] = { down: 0, up: 0 });
+          t.down += (((p.rxBytes ?? 0) + (d.rxBytes ?? 0)) / 2) * dt / 8;
+          t.up += (((p.txBytes ?? 0) + (d.txBytes ?? 0)) / 2) * dt / 8;
+        }
       }
+      prev = cur;
     }
     return totals;
   }
