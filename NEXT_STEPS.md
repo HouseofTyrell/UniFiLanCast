@@ -54,7 +54,9 @@ A full multi-dimension code review (architecture, correctness, security, perform
 - [ ] **`visualization.ts` is a ~950-line god-module** — split layout / rendering / weather / hit-testing.
 - [ ] **No config schema validation on load** — validate `config.json` at startup (zod) with clear errors.
 - [ ] **Webhook SSRF hardening** (block private targets) (SEC-6); normalize `CONFIG_PATH`/`DATA_DIR` (SEC-7).
-- [ ] **CI/CD** — GitHub Actions (build + lint + tests); automated Docker builds. **API docs** — OpenAPI/Swagger.
+- [x] **Local CI** — `npm run ci` (typecheck + build + tests-when-present) wired to a git `pre-push` hook via `.githooks`. _(GitHub Actions + automated Docker builds deferred.)_
+- [ ] **Lint** — ESLint was never actually installed/configured (the old `lint` scripts were dead and have been removed); add a flat ESLint config and fold it into `npm run ci`.
+- [ ] **API docs** — OpenAPI/Swagger for the REST surface.
 
 ---
 

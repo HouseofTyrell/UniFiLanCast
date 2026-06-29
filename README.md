@@ -142,12 +142,21 @@ web/      React + Vite + HTML5 canvas
 
 ```bash
 npm run build          # build server + web
-npm run build:server   # tsc
-npm run build:web      # tsc + vite build
-cd server && npm run lint
+npm run typecheck      # tsc --noEmit, both workspaces
+npm run ci             # local CI gate: typecheck + build (+ tests when present)
 ```
 
-> ⚠️ There is currently no automated test suite — see [NEXT_STEPS.md](NEXT_STEPS.md). Contributions welcome (TypeScript strict mode; keep server and web type definitions in sync).
+### Local CI
+
+`npm install` wires a **git `pre-push` hook** (via `core.hooksPath=.githooks`) that runs `npm run ci` before every push, so broken builds never reach the remote. If you cloned and the hook isn't active, run:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Bypass in an emergency with `git push --no-verify`. CI is **local-only** for now (no GitHub Actions).
+
+> ⚠️ There is no automated test suite yet — `npm run ci` already runs `npm test` (a no-op until test scripts exist), so adding Vitest later needs no CI changes. See [NEXT_STEPS.md](NEXT_STEPS.md). Keep server and web type definitions in sync.
 
 ---
 

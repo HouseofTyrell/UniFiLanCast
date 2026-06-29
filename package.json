@@ -14,7 +14,11 @@
     "build": "npm run build --workspaces",
     "build:server": "npm run build --workspace=server",
     "build:web": "npm run build --workspace=web",
-    "start": "npm run start --workspace=server"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "ci": "npm run typecheck && npm run build && npm run test",
+    "start": "npm run start --workspace=server",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

@@ -1,0 +1,12 @@
+#!/bin/sh
+#
+# Local CI gate — runs before every `git push`.
+# Typechecks + builds (+ tests, once present) across both workspaces.
+# Bypass in an emergency with:  git push --no-verify
+#
+set -e
+
+echo "▶ Local CI: typecheck + build (+ tests)…"
+npm run ci
+
+echo "✓ Local CI passed — pushing."
