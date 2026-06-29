@@ -1,0 +1,89 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Backgrounds — near-black (never true black, so glow can bleed) */
+  --bg-void: #06070d;
+  --bg: #0a0c14;
+  --bg-elevated: #0f1320;
+  --bg-glow-core: #131a2e;
+
+  /* Surface elevation ladder (glass) */
+  --surface-1: rgba(18, 22, 34, 0.55);
+  --surface-2: rgba(20, 25, 40, 0.68);
+  --surface-3: rgba(24, 30, 48, 0.86);
+  --panel: var(--surface-2);
+  --panel-solid: #111726;
+
+  --border-hairline: rgba(255, 255, 255, 0.07);
+  --border-edge: rgba(255, 255, 255, 0.12);
+  --panel-border: var(--border-hairline);
+  --panel-border-strong: var(--border-edge);
+
+  /* Text tiers — faintly cool, near-white at the top */
+  --text-hi: #f2f5fc;
+  --text: #e7ecf7;
+  --text-base: #c5ccde;
+  --text-dim: #828da6;
+  --text-faint: #4e576e;
+
+  /* Accents — desaturated "instrument" signal colors */
+  --ice: #5dd2f0;
+  --ice-deep: #2a8fb8;
+  --amber: #f2b441;
+  --accent-down: var(--ice);
+  --accent-up: var(--amber);
+  --accent-online: #3fd9a6;
+  --accent-warn: #f2b441;
+  --accent-bad: #f2615c;
+
+  /* Device identity — desaturated jewel tones */
+  --type-gateway: #f5a623;
+  --type-switch: #4da8e8;
+  --type-ap: #3fd9a6;
+  --type-client: #8b92f2;
+
+  /* Glow tokens (drive canvas bloom) */
+  --glow-ice: rgba(93, 210, 240, 0.55);
+  --glow-amber: rgba(242, 180, 65, 0.5);
+  --glow-bad: rgba(242, 97, 92, 0.6);
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --blur: 20px;
+  --shadow: 0 1px 0 0 var(--border-edge) inset, 0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 16px 40px -12px rgba(0, 0, 0, 0.7);
+
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Premium glass: low-saturation fill + lit top edge + soft floor shadow */
+.glass {
+  background: var(--surface-2);
+  backdrop-filter: blur(var(--blur)) saturate(120%);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(120%);
+  border: 1px solid var(--border-hairline);
+  box-shadow: var(--shadow);
+}

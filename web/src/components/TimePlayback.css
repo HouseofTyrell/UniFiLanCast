@@ -1,14 +1,16 @@
 .time-playback {
   position: fixed;
-  bottom: 20px;
+  bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(10, 14, 26, 0.95);
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 15px;
-  min-width: 400px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  background: var(--panel);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  min-width: 360px;
+  box-shadow: var(--shadow);
   z-index: 1000;
 }
 
@@ -19,15 +21,16 @@
 .playback-toggle {
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: var(--text);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
-  padding: 5px 10px;
+  padding: 4px 10px;
+  letter-spacing: 0.2px;
 }
 
 .playback-toggle:hover {
-  color: #007aff;
+  color: var(--accent-down);
 }
 
 .playback-content {
@@ -45,19 +48,19 @@
 
 .playback-buttons button,
 .playback-controls button {
-  background: #333;
-  border: none;
-  color: #ffffff;
-  padding: 8px 16px;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  padding: 7px 14px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
-  transition: background 0.2s;
+  transition: background 0.15s;
 }
 
 .playback-buttons button:hover,
 .playback-controls button:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .playback-controls {
@@ -84,7 +87,7 @@
   appearance: none;
   width: 16px;
   height: 16px;
-  background: #007aff;
+  background: var(--accent-down);
   border-radius: 50%;
   cursor: pointer;
 }
@@ -92,7 +95,7 @@
 .playback-slider input[type='range']::-moz-range-thumb {
   width: 16px;
   height: 16px;
-  background: #007aff;
+  background: var(--accent-down);
   border-radius: 50%;
   cursor: pointer;
   border: none;

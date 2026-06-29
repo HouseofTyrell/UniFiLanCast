@@ -9,5 +9,9 @@ config.json
 server/config.json
 *.tsbuildinfo
 coverage/
+data/
+*.db
+*.db-shm
+*.db-wal
 .vscode/
 .idea/

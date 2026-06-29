@@ -20,6 +20,17 @@ export interface Device {
   latencyMs?: number;
   jitterMs?: number;
   packetLoss?: number;
+  cpuPct?: number;
+  memPct?: number;
+  loadAvg?: number;
+  totalRxBytes?: number;
+  totalTxBytes?: number;
+  connectedSince?: number;
+  experience?: number;
+  vendor?: string;
+  osName?: string;
+  channel?: number;
+  network?: string;
 }
 
 export type LinkKind = 'uplink' | 'client' | 'gateway';
@@ -86,6 +97,8 @@ export interface VisualizationNode {
   vx: number;
   vy: number;
   radius: number;
+  targetX?: number;
+  targetY?: number;
 }
 
 export interface Filter {

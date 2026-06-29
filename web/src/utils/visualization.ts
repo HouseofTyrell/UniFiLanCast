@@ -4,35 +4,119 @@ import {
   WeatherSignals,
   VisualizationNode,
   Filter,
-  DeviceType,
 } from '../types';
+import { formatBitrateStr } from './format';
+import { vlanColor, ColorMode } from './vlan';
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  color: string;
+// "Observatory" palette — must mirror theme.css. Light is emitted from the
+// data; the chrome stays neutral.
+const PALETTE = {
+  gateway: '#f5a623',
+  switch: '#4da8e8',
+  ap: '#3fd9a6',
+  client: '#8b92f2',
+  offline: '#2a2f3d',
+  ice: '#5dd2f0',
+  amber: '#f2b441',
+  bad: '#f2615c',
+};
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '');
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
 }
+function withAlpha(hex: string, a: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+function mix(hex: string, target: number, amt: number): string {
+  const [r, g, b] = hexToRgb(hex);
+  const m = (c: number) => Math.round(c + (target - c) * amt);
+  return `rgb(${m(r)}, ${m(g)}, ${m(b)})`;
+}
+const lighten = (hex: string, amt: number) => mix(hex, 255, amt);
+const darken = (hex: string, amt: number) => mix(hex, 0, amt);
 
 export class NetworkVisualization {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private nodes: Map<string, VisualizationNode> = new Map();
-  private centerX = 0;
-  private centerY = 0;
   private hoveredNode: VisualizationNode | null = null;
-  private particles: Particle[] = [];
+  private selectedId: string | null = null;
+  private colorMode: ColorMode = 'type';
   private animationFrame = 0;
   private deviceIcons: Map<string, HTMLImageElement> = new Map();
   private iconsLoaded = false;
 
+  // Radial-tree layout geometry (computed each frame).
+  private layoutCx = 0;
+  private layoutCy = 0;
+  private ringRadii: number[] = [];
+
+  // Ambient starfield dust (seeded once, normalized 0..1 coords).
+  private stars: Array<{ x: number; y: number; a: number; r: number }> = [];
+
+  // Stable drift phase per node id.
+  private phaseCache = new Map<string, number>();
+  // Time-smoothed activity (0..1) per device id.
+  private activityCache = new Map<string, number>();
+
+  // Focus pass: ids of the hovered/selected node + ancestors (or null).
+  private focusSet: Set<string> | null = null;
+
+  // Active lightning bolts (decay over a few hundred ms).
+  private bolts: Array<{ fromId: string; toId: string; born: number }> = [];
+  private lastBoltAt = new Map<string, number>();
+
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
+    this.seedStars();
     this.resize();
     this.loadDeviceIcons();
+  }
+
+  private seedStars() {
+    // Deterministic pseudo-random so the field doesn't reshuffle each frame.
+    let s = 1337;
+    const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    this.stars = Array.from({ length: 70 }, () => ({
+      x: rnd(),
+      y: rnd(),
+      a: 0.03 + rnd() * 0.06,
+      r: rnd() < 0.85 ? 1 : 1.5,
+    }));
+  }
+
+  /** Normalize a rate (bits/sec) to 0..1 on a log scale (~50Kbps..~50Mbps). */
+  private rateLevel(bps: number): number {
+    if (bps <= 0) return 0;
+    const lo = Math.log10(50_000);
+    const hi = Math.log10(50_000_000);
+    return Math.max(0, Math.min(1, (Math.log10(bps) - lo) / (hi - lo)));
+  }
+
+  /** Combined throughput level (download + upload). */
+  private trafficLevel(device: Device): number {
+    return this.rateLevel((device.txBytes || 0) + (device.rxBytes || 0));
+  }
+
+  /**
+   * Advance the time-smoothed activity for every device once per frame.
+   * Snapshots arrive in ~5s steps; easing toward the live value makes
+   * size/brightness/pull glide instead of popping when a new snapshot lands.
+   */
+  private tickActivity(devices: Device[]) {
+    for (const d of devices) {
+      const raw = this.trafficLevel(d);
+      const prev = this.activityCache.get(d.id);
+      this.activityCache.set(d.id, prev === undefined ? raw : prev + (raw - prev) * 0.05);
+    }
+  }
+
+  /** Read the smoothed activity (0..1) for a device. */
+  private nodeActivity(device: Device): number {
+    return this.activityCache.get(device.id) ?? this.trafficLevel(device);
   }
 
   private loadDeviceIcons() {
@@ -72,125 +156,204 @@ export class NetworkVisualization {
   resize() {
     this.canvas.width = window.innerWidth;
     this.canvas.height = window.innerHeight;
-    this.centerX = this.canvas.width / 2;
-    this.centerY = this.canvas.height / 2;
   }
 
-  updateLayout(devices: Device[], links: Link[]) {
-    // Create nodes for devices
+  updateLayout(devices: Device[], _links: Link[]) {
+    const box = this.layoutBox();
+    this.tickActivity(devices);
+
     for (const device of devices) {
       let node = this.nodes.get(device.id);
-
+      const radius = this.getNodeRadius(device, this.nodeActivity(device));
       if (!node) {
-        // Initialize new node
-        node = {
-          device,
-          x: this.centerX + (Math.random() - 0.5) * 100,
-          y: this.centerY + (Math.random() - 0.5) * 100,
-          vx: 0,
-          vy: 0,
-          radius: this.getNodeRadius(device),
-        };
+        // New nodes spawn at the center and ease out to their target.
+        node = { device, x: box.cx, y: box.cy, vx: 0, vy: 0, radius };
         this.nodes.set(device.id, node);
       } else {
-        // Update device data
         node.device = device;
-        node.radius = this.getNodeRadius(device);
+        node.radius = radius;
       }
     }
 
-    // Remove nodes for devices that no longer exist
     const deviceIds = new Set(devices.map(d => d.id));
     for (const [id] of this.nodes) {
-      if (!deviceIds.has(id)) {
-        this.nodes.delete(id);
-      }
+      if (!deviceIds.has(id)) this.nodes.delete(id);
     }
 
-    // Apply force-directed layout
-    this.applyForces(links);
+    this.computeRadialTargets(devices, box);
+
+    // Ease toward target plus a slow, gentle Lissajous drift. Low easing +
+    // small slow drift = an organic float, not a jittery bounce.
+    const t = this.animationFrame;
+    for (const node of this.nodes.values()) {
+      if (node.targetX === undefined || node.targetY === undefined) continue;
+      const ph = this.nodePhase(node.device.id);
+      const amp = node.device.type === 'client' ? 3.2 : 2;
+      const dx = Math.sin(t * 0.006 + ph) * amp;
+      const dy = Math.cos(t * 0.0047 + ph * 1.7) * amp;
+      node.x += (node.targetX + dx - node.x) * 0.05;
+      node.y += (node.targetY + dy - node.y) * 0.05;
+    }
   }
 
-  private applyForces(_links: Link[]) {
-    const nodes = Array.from(this.nodes.values());
+  /** Stable per-node phase (0..2π) so each node drifts on its own rhythm. */
+  private nodePhase(id: string): number {
+    let cached = this.phaseCache.get(id);
+    if (cached === undefined) {
+      let h = 0;
+      for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+      cached = ((h % 1000) / 1000) * Math.PI * 2;
+      this.phaseCache.set(id, cached);
+    }
+    return cached;
+  }
 
-    // Reset forces
-    for (const node of nodes) {
-      node.vx = 0;
-      node.vy = 0;
+  /** Usable drawing area: full canvas minus the header. */
+  private layoutBox() {
+    const top = 72;
+    const availH = this.canvas.height - top;
+    const cx = this.canvas.width / 2;
+    const cy = top + availH * 0.5;
+    const maxR = Math.min(this.canvas.width * 0.42, availH * 0.46);
+    return { cx, cy, maxR };
+  }
+
+  /**
+   * Hub-and-cluster layout. Infrastructure is laid out as a compact radial tree
+   * (gateway at center, switches/APs on inner rings); each device's clients are
+   * then packed into a phyllotaxis disc around it. This keeps the picture dense
+   * and central instead of flinging clients onto one big sparse outer ring.
+   */
+  private computeRadialTargets(devices: Device[], box: { cx: number; cy: number; maxR: number }) {
+    const ids = new Set(devices.map(d => d.id));
+    const typeOf = (id: string) => this.nodes.get(id)?.device.type;
+    const gateway = devices.find(d => d.type === 'gateway');
+    const rootId = gateway?.id ?? devices.find(d => d.type !== 'client')?.id ?? devices[0]?.id;
+    if (!rootId) return;
+
+    // Child map; orphans (unresolved uplink) hang off the gateway.
+    const children = new Map<string, string[]>();
+    const add = (p: string, c: string) => {
+      const a = children.get(p);
+      if (a) a.push(c);
+      else children.set(p, [c]);
+    };
+    for (const d of devices) {
+      if (d.id === rootId) continue;
+      const pid = d.parentDeviceId && ids.has(d.parentDeviceId) ? d.parentDeviceId : rootId;
+      add(pid, d.id);
+    }
+    const infraKids = (id: string) =>
+      (children.get(id) || [])
+        .filter(c => typeOf(c) !== 'client')
+        .sort((a, b) => (this.nodes.get(a)?.device.name || '').localeCompare(this.nodes.get(b)?.device.name || ''));
+    const clientKids = (id: string) => (children.get(id) || []).filter(c => typeOf(c) === 'client');
+
+    // Angular weight: branches fan out around the gateway, and hubs with many
+    // clients claim a wider wedge so their cluster has room to spread.
+    const wMemo = new Map<string, number>();
+    const weight = (id: string): number => {
+      if (wMemo.has(id)) return wMemo.get(id)!;
+      let w = 1 + Math.sqrt(clientKids(id).length) * 0.7;
+      for (const c of infraKids(id)) w += weight(c);
+      wMemo.set(id, w);
+      return w;
+    };
+
+    let maxDepth = 0;
+    const depthOf = (id: string, d: number) => {
+      maxDepth = Math.max(maxDepth, d);
+      for (const c of infraKids(id)) depthOf(c, d + 1);
+    };
+    depthOf(rootId, 0);
+    // Step each hierarchy level well out from the last, so deeper hubs (APs)
+    // sit in open space with room for their clusters (the scale step refits it).
+    const ringStep = maxDepth > 0 ? (box.maxR * 0.85) / maxDepth : box.maxR * 0.55;
+
+    const placeInfra = (id: string, depth: number, a0: number, a1: number) => {
+      const node = this.nodes.get(id);
+      if (node) {
+        const angle = (a0 + a1) / 2;
+        const r = depth * ringStep;
+        node.targetX = box.cx + r * Math.cos(angle);
+        node.targetY = box.cy + r * Math.sin(angle);
+      }
+      const kids = infraKids(id);
+      if (kids.length === 0) return;
+      const total = kids.reduce((s, c) => s + weight(c), 0);
+      const span = a1 - a0;
+      let cur = a0;
+      for (const c of kids) {
+        const frac = weight(c) / total;
+        placeInfra(c, depth + 1, cur, cur + span * frac);
+        cur += span * frac;
+      }
+    };
+    placeInfra(rootId, 0, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI);
+
+    // Pack each device's clients around it. Each client keeps a STABLE angle
+    // (sorted by id, so they never swap seats); activity drives a smooth
+    // outward pull, so a device gliding idle→busy eases outward continuously
+    // instead of jumping between bands.
+    const PACK = 11; // huddle spacing — more room between clients
+    const PULL = 92; // outward distance for a fully-active client
+    for (const pid of children.keys()) {
+      if (typeOf(pid) === 'client') continue;
+      const parent = this.nodes.get(pid);
+      if (!parent || parent.targetX === undefined || parent.targetY === undefined) continue;
+      const kids = clientKids(pid).slice().sort();
+      if (kids.length === 0) continue;
+
+      let ox = parent.targetX - box.cx;
+      let oy = parent.targetY - box.cy;
+      const ol = Math.hypot(ox, oy) || 1;
+      ox /= ol;
+      oy /= ol;
+      const hubOff = pid === rootId ? 0 : parent.radius + 10;
+      const bx = parent.targetX + ox * hubOff;
+      const by = parent.targetY + oy * hubOff;
+      const phase = this.nodePhase(pid);
+
+      kids.forEach((cid, i) => {
+        const cn = this.nodes.get(cid);
+        if (!cn) return;
+        const activity = this.nodeActivity(cn.device);
+        const rr = 7 + PACK * Math.sqrt(i + 0.5) + activity * PULL;
+        const ang = i * 2.399963 + phase;
+        cn.targetX = bx + Math.cos(ang) * rr;
+        cn.targetY = by + Math.sin(ang) * rr;
+      });
     }
 
-    // Apply forces based on device hierarchy
-    for (const node of nodes) {
-      const { device } = node;
-
-      // Gateway at center
-      if (device.type === 'gateway') {
-        const dx = this.centerX - node.x;
-        const dy = this.centerY - node.y;
-        node.vx += dx * 0.1;
-        node.vy += dy * 0.1;
-      }
-      // Infrastructure devices orbit around gateway
-      else if (device.type === 'switch' || device.type === 'ap') {
-        const parent = device.parentDeviceId
-          ? this.nodes.get(device.parentDeviceId)
-          : null;
-
-        if (parent) {
-          const desiredDistance = 150;
-          const dx = node.x - parent.x;
-          const dy = node.y - parent.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance > 0) {
-            const force = (distance - desiredDistance) * 0.05;
-            node.vx -= (dx / distance) * force;
-            node.vy -= (dy / distance) * force;
-          }
-        }
-      }
-      // Clients cluster around their parent
-      else if (device.type === 'client') {
-        const parent = device.parentDeviceId
-          ? this.nodes.get(device.parentDeviceId)
-          : null;
-
-        if (parent) {
-          const desiredDistance = 80;
-          const dx = node.x - parent.x;
-          const dy = node.y - parent.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance > 0) {
-            const force = (distance - desiredDistance) * 0.08;
-            node.vx -= (dx / distance) * force;
-            node.vy -= (dy / distance) * force;
-          }
-        }
-      }
-
-      // Repel from other nodes
-      for (const other of nodes) {
-        if (other === node) continue;
-
-        const dx = node.x - other.x;
-        const dy = node.y - other.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < 100 && distance > 0) {
-          const force = 50 / (distance * distance);
-          node.vx += (dx / distance) * force;
-          node.vy += (dy / distance) * force;
-        }
+    // Scale + center from a STABLE estimate of each hub's reach (a function of
+    // client COUNT, not live rates), so traffic never rescales the whole
+    // picture. This is what stops the periodic global "bounce".
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const d of devices) {
+      if (d.type === 'client') continue;
+      const n = this.nodes.get(d.id);
+      if (!n || n.targetX === undefined || n.targetY === undefined) continue;
+      const cc = clientKids(d.id).length;
+      const reach = cc ? 7 + PACK * Math.sqrt(cc) + PULL * 0.55 + 16 : n.radius + 8;
+      minX = Math.min(minX, n.targetX - reach); maxX = Math.max(maxX, n.targetX + reach);
+      minY = Math.min(minY, n.targetY - reach); maxY = Math.max(maxY, n.targetY + reach);
+    }
+    if (Number.isFinite(minX)) {
+      const ccx = (minX + maxX) / 2;
+      const ccy = (minY + maxY) / 2;
+      const halfExtent = Math.max((maxX - minX) / 2, (maxY - minY) / 2, 1);
+      const scale = Math.max(0.8, Math.min(1.7, box.maxR / halfExtent));
+      for (const n of this.nodes.values()) {
+        if (n.targetX === undefined || n.targetY === undefined) continue;
+        n.targetX = box.cx + (n.targetX - ccx) * scale;
+        n.targetY = box.cy + (n.targetY - ccy) * scale;
       }
     }
 
-    // Apply velocities with damping
-    for (const node of nodes) {
-      node.x += node.vx * 0.5;
-      node.y += node.vy * 0.5;
-    }
+    // Decorative radar rings centered on the canvas.
+    this.layoutCx = box.cx;
+    this.layoutCy = box.cy;
+    this.ringRadii = [0.3, 0.55, 0.8, 1].map(f => f * box.maxR);
   }
 
   render(
@@ -200,10 +363,6 @@ export class NetworkVisualization {
     filter: Filter
   ) {
     this.animationFrame++;
-
-    // Clear canvas with dark background
-    this.ctx.fillStyle = '#0a0e1a';
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // Filter devices
     const filteredDevices = this.applyFilter(devices, filter);
@@ -215,27 +374,33 @@ export class NetworkVisualization {
         filteredDeviceIds.has(link.fromId) && filteredDeviceIds.has(link.toId)
     );
 
-    // Update layout
+    // Update layout (computes ring geometry used by the background)
     this.updateLayout(filteredDevices, filteredLinks);
+
+    // When a node is hovered/selected, compute its uplink path so we can dim
+    // everything else (the focus pass).
+    this.focusSet = this.computeFocusSet();
+
+    // Background: radial vignette + concentric radar rings
+    this.drawBackground();
 
     // Render links with weather effects
     for (const link of filteredLinks) {
       this.renderLink(link, weather);
     }
 
-    // Update and render particles
-    this.updateParticles();
-    this.renderParticles();
+    // Lightning bolts (from latency/spike events), drawn over links.
+    this.updateBolts(weather);
+    this.renderBolts();
 
-    // Generate lightning particles
-    this.generateLightningParticles(weather);
-
-    // Render nodes
-    for (const device of filteredDevices) {
-      const node = this.nodes.get(device.id);
-      if (node) {
-        this.renderNode(node, weather);
-      }
+    // Render nodes back-to-front by activity, so busy devices sit on top and
+    // idle ones recede into the background.
+    const drawList = filteredDevices
+      .map(d => this.nodes.get(d.id))
+      .filter((n): n is VisualizationNode => !!n)
+      .sort((a, b) => this.nodeActivity(a.device) - this.nodeActivity(b.device));
+    for (const node of drawList) {
+      this.renderNode(node, weather);
     }
 
     // Render hover tooltip
@@ -244,275 +409,414 @@ export class NetworkVisualization {
     }
   }
 
-  private renderLink(link: Link, weather: WeatherSignals) {
+  /** ids of the focused node + its ancestors to the gateway, or null. */
+  private computeFocusSet(): Set<string> | null {
+    const focusId = this.selectedId || this.hoveredNode?.device.id || null;
+    if (!focusId) return null;
+    const set = new Set<string>();
+    let cur: string | undefined = focusId;
+    let guard = 0;
+    while (cur && !set.has(cur) && guard++ < 50) {
+      set.add(cur);
+      cur = this.nodes.get(cur)?.device.parentDeviceId;
+    }
+    return set;
+  }
+
+  private drawBackground() {
+    const { ctx } = this;
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const cx = this.layoutCx || w / 2;
+    const cy = this.layoutCy || h / 2;
+    const maxR = this.ringRadii.length ? this.ringRadii[this.ringRadii.length - 1] : Math.min(w, h) / 2;
+
+    // 3-stop radial: lit core → base → vignette at the corners.
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 1.7);
+    grad.addColorStop(0, '#131a2e');
+    grad.addColorStop(0.55, '#0a0c14');
+    grad.addColorStop(1, '#06070d');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+
+    // Ambient starfield dust with a slow parallax drift.
+    const drift = this.animationFrame * 0.02;
+    ctx.save();
+    for (const star of this.stars) {
+      const sx = ((star.x * w + drift) % w + w) % w;
+      const sy = (star.y * h) % h;
+      ctx.fillStyle = `rgba(180, 200, 235, ${star.a})`;
+      ctx.beginPath();
+      ctx.arc(sx, sy, star.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Concentric radar rings + cardinal tick marks (instrument bezel).
+    ctx.save();
+    for (let i = 0; i < this.ringRadii.length; i++) {
+      const r = this.ringRadii[i];
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(120, 150, 200, ${i === this.ringRadii.length - 1 ? 0.08 : 0.05})`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    // Trailing radar wedge — a sector that fades behind the leading edge.
+    const sweep = (this.animationFrame * 0.0025) % (Math.PI * 2);
+    const wedge = 0.42;
+    ctx.globalCompositeOperation = 'lighter';
+    const steps = 10;
+    for (let i = 0; i < steps; i++) {
+      const a = sweep - (i / steps) * wedge;
+      const alpha = 0.05 * (1 - i / steps);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
+      ctx.strokeStyle = withAlpha(PALETTE.ice, alpha);
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private renderLink(link: Link, _weather: WeatherSignals) {
     const fromNode = this.nodes.get(link.fromId);
     const toNode = this.nodes.get(link.toId);
-
     if (!fromNode || !toNode) return;
+    const ctx = this.ctx;
 
-    const linkId = `${link.fromId}-${link.toId}`;
-    const intensity = weather.stormIntensity[linkId] || 0;
+    // Focus pass: a link is lit only if both endpoints are in the focus set.
+    const focusDim =
+      this.focusSet && !(this.focusSet.has(link.fromId) && this.focusSet.has(link.toId))
+        ? 0.18
+        : 1;
 
-    // Base color based on health
-    const health = link.healthScore;
-    let color: string;
+    // Control point nudged outward from center so the graph fans organically.
+    const mx = (fromNode.x + toNode.x) / 2;
+    const my = (fromNode.y + toNode.y) / 2;
+    const nx = mx - this.layoutCx;
+    const ny = my - this.layoutCy;
+    const nl = Math.hypot(nx, ny) || 1;
+    const bow = 14;
+    const cxp = mx + (nx / nl) * bow;
+    const cyp = my + (ny / nl) * bow;
 
-    if (health < 0.3) {
-      color = '#ff4444';
-    } else if (health < 0.7) {
-      color = '#ffaa44';
-    } else {
-      color = '#4488ff';
+    // Perpendicular, so the two directional strands run as separate lines.
+    const dx = toNode.x - fromNode.x;
+    const dy = toNode.y - fromNode.y;
+    const dl = Math.hypot(dx, dy) || 1;
+    const px = -dy / dl;
+    const py = dx / dl;
+
+    const strand = (off: number) => {
+      ctx.beginPath();
+      ctx.moveTo(fromNode.x + px * off, fromNode.y + py * off);
+      ctx.quadraticCurveTo(cxp + px * off, cyp + py * off, toNode.x + px * off, toNode.y + py * off);
+      ctx.stroke();
+    };
+
+    const child = toNode.device;
+    const downLvl = this.rateLevel(child.rxBytes || 0);
+    const upLvl = this.rateLevel(child.txBytes || 0);
+    const sep = 2.6;
+
+    ctx.save();
+    ctx.globalAlpha = focusDim;
+
+    // Faint base for both strands so idle links still read.
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = withAlpha(this.getNodeColor(child), 0.14);
+    strand(sep);
+    strand(-sep);
+
+    // Download strand (ice) flows parent → child.
+    if (downLvl > 0.05) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = withAlpha(PALETTE.ice, 0.25 + downLvl * 0.5);
+      ctx.lineWidth = 1 + downLvl * 2.2;
+      ctx.shadowColor = PALETTE.ice;
+      ctx.shadowBlur = 6 * downLvl;
+      const dash = 4 + downLvl * 6;
+      ctx.setLineDash([dash, dash * 2.4]);
+      ctx.lineDashOffset = -(this.animationFrame * (1 + downLvl * 3)) % 100000;
+      strand(sep);
     }
 
-    // Line thickness based on utilization
-    const baseWidth = 1;
-    const maxWidth = 5;
-    const width = baseWidth + intensity * (maxWidth - baseWidth);
-
-    // Animate wind effect
-    const pulse = Math.sin(this.animationFrame * 0.05 + intensity * 10) * 0.3 + 0.7;
-
-    this.ctx.save();
-    this.ctx.strokeStyle = color;
-    this.ctx.lineWidth = width * pulse;
-    this.ctx.globalAlpha = 0.3 + intensity * 0.5;
-
-    // Draw curved line
-    const midX = (fromNode.x + toNode.x) / 2;
-    const midY = (fromNode.y + toNode.y) / 2;
-    const offset = 20;
-
-    this.ctx.beginPath();
-    this.ctx.moveTo(fromNode.x, fromNode.y);
-    this.ctx.quadraticCurveTo(
-      midX + offset,
-      midY + offset,
-      toNode.x,
-      toNode.y
-    );
-    this.ctx.stroke();
-
-    // Draw flow particles for high utilization
-    if (intensity > 0.3 && this.animationFrame % 5 === 0) {
-      const t = Math.random();
-      const x = fromNode.x * (1 - t) + toNode.x * t;
-      const y = fromNode.y * (1 - t) + toNode.y * t;
-
-      this.particles.push({
-        x,
-        y,
-        vx: (toNode.x - fromNode.x) * 0.02,
-        vy: (toNode.y - fromNode.y) * 0.02,
-        life: 30,
-        color,
-      });
+    // Upload strand (amber) flows child → parent.
+    if (upLvl > 0.05) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = withAlpha(PALETTE.amber, 0.25 + upLvl * 0.5);
+      ctx.lineWidth = 1 + upLvl * 2.2;
+      ctx.shadowColor = PALETTE.amber;
+      ctx.shadowBlur = 6 * upLvl;
+      const dash = 4 + upLvl * 6;
+      ctx.setLineDash([dash, dash * 2.4]);
+      ctx.lineDashOffset = (this.animationFrame * (1 + upLvl * 3)) % 100000;
+      strand(-sep);
     }
 
-    this.ctx.restore();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   private renderNode(node: VisualizationNode, weather: WeatherSignals) {
     const { device } = node;
+    const ctx = this.ctx;
+    const TAU = Math.PI * 2;
     const fog = weather.fogLevel[device.id] || 0;
     const heat = weather.heat[device.id] || 0;
-
-    this.ctx.save();
-
-    // Draw fog halo
-    if (fog > 0.1) {
-      const gradient = this.ctx.createRadialGradient(
-        node.x,
-        node.y,
-        node.radius,
-        node.x,
-        node.y,
-        node.radius + 20
-      );
-      gradient.addColorStop(0, `rgba(150, 150, 150, ${fog * 0.3})`);
-      gradient.addColorStop(1, 'rgba(150, 150, 150, 0)');
-
-      this.ctx.fillStyle = gradient;
-      this.ctx.beginPath();
-      this.ctx.arc(node.x, node.y, node.radius + 20, 0, Math.PI * 2);
-      this.ctx.fill();
-    }
-
-    // Draw heat glow
-    if (heat > 0.1) {
-      const gradient = this.ctx.createRadialGradient(
-        node.x,
-        node.y,
-        node.radius,
-        node.x,
-        node.y,
-        node.radius + 15
-      );
-      gradient.addColorStop(0, `rgba(255, 100, 0, ${heat * 0.4})`);
-      gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
-
-      this.ctx.fillStyle = gradient;
-      this.ctx.beginPath();
-      this.ctx.arc(node.x, node.y, node.radius + 15, 0, Math.PI * 2);
-      this.ctx.fill();
-    }
-
-    // Draw node
+    const online = device.online;
+    const isClient = device.type === 'client';
+    const active = this.nodeActivity(device);
     const color = this.getNodeColor(device);
-    this.ctx.fillStyle = color;
-    this.ctx.strokeStyle = device.online ? '#ffffff' : '#666666';
-    this.ctx.lineWidth = 2;
+    const r = node.radius;
+    const hovered = this.hoveredNode === node || this.selectedId === device.id;
+    const selected = this.selectedId === device.id;
 
-    this.ctx.beginPath();
-    this.ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
-    this.ctx.fill();
-    this.ctx.stroke();
+    // Activity prominence: what's moving data dominates; idle switches recede.
+    // The gateway stays the anchor.
+    const prominence =
+      device.type === 'gateway' ? 1 : isClient ? 0.26 + active * 0.74 : 0.34 + active * 0.66;
+    // Focus pass: dim anything outside the hovered/selected node's path.
+    const focusDim = this.focusSet && !this.focusSet.has(device.id) ? 0.22 : 1;
 
-    // Draw icon - use SVG if loaded, otherwise fallback to text
-    const icon = this.deviceIcons.get(device.type);
-    if (this.iconsLoaded && icon && icon.complete) {
-      const iconSize = node.radius * 1.8;
-      this.ctx.drawImage(
-        icon,
-        node.x - iconSize / 2,
-        node.y - iconSize / 2,
-        iconSize,
-        iconSize
-      );
+    ctx.save();
+    // Fog fades a degraded device toward the background.
+    const baseAlpha = (online ? 1 : 0.5) * (1 - fog * 0.45) * prominence * focusDim;
+    ctx.globalAlpha = baseAlpha;
+
+    // (1) Bloom halo — additive, fades to transparent-of-hue. Skipped for idle
+    // clients and offline nodes so the outer ring reads as a starfield.
+    const showBloom = online && (!isClient || active > 0.04 || heat > 0.12 || hovered);
+    if (showBloom) {
+      const heatColor = heat > 0.5 ? PALETTE.bad : heat > 0.15 ? PALETTE.amber : color;
+      const breathe = 1 + Math.sin(this.animationFrame * 0.04 + node.x * 0.05) * 0.06;
+      const haloR = r * (2.3 + heat * 1.4) * breathe;
+      const strength = Math.min(0.6, Math.max(0.18, heat * 0.55, active * 0.45) + (hovered ? 0.25 : 0));
+      const halo = ctx.createRadialGradient(node.x, node.y, r * 0.3, node.x, node.y, haloR);
+      halo.addColorStop(0, withAlpha(heatColor, strength));
+      halo.addColorStop(1, withAlpha(heatColor, 0));
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, haloR, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // (2) Body — radial-shaded orb (fake top-left light) or graphite if offline.
+    if (online) {
+      const body = ctx.createRadialGradient(node.x - r * 0.3, node.y - r * 0.3, r * 0.1, node.x, node.y, r);
+      body.addColorStop(0, lighten(color, 0.3));
+      body.addColorStop(1, darken(color, 0.42));
+      ctx.fillStyle = body;
     } else {
-      // Fallback to text icons
-      this.ctx.fillStyle = '#ffffff';
-      this.ctx.font = `${node.radius}px Arial`;
-      this.ctx.textAlign = 'center';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(this.getNodeIcon(device.type), node.x, node.y);
+      ctx.fillStyle = PALETTE.offline;
+    }
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, TAU);
+    ctx.fill();
+
+    // (3) Ring — node color at high lightness, with a soft self-glow.
+    ctx.lineWidth = isClient ? 1 : 1.5;
+    ctx.strokeStyle = online ? lighten(color, 0.45) : '#4a5163';
+    if (online && !isClient) {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+    }
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, TAU);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Icon only where there's room (infra + larger active clients).
+    const icon = this.deviceIcons.get(device.type);
+    if (r >= 12 && this.iconsLoaded && icon && icon.complete) {
+      const iconSize = r * 1.5;
+      ctx.globalAlpha = baseAlpha * (online ? 0.92 : 0.5);
+      ctx.drawImage(icon, node.x - iconSize / 2, node.y - iconSize / 2, iconSize, iconSize);
+      ctx.globalAlpha = baseAlpha;
     }
 
-    // Draw WiFi signal indicator
-    if (device.wiredOrWifi === 'wifi' && device.rssi) {
-      const signalStrength = Math.max(0, (device.rssi + 90) / 60);
-      this.ctx.fillStyle = signalStrength > 0.6 ? '#4ade80' : signalStrength > 0.3 ? '#fbbf24' : '#ef4444';
-      this.ctx.beginPath();
-      this.ctx.arc(node.x + node.radius - 5, node.y - node.radius + 5, 3, 0, Math.PI * 2);
-      this.ctx.fill();
+    // WiFi signal pip.
+    if (!isClient && device.wiredOrWifi === 'wifi' && device.rssi) {
+      const s = Math.max(0, (device.rssi + 90) / 60);
+      ctx.fillStyle = s > 0.6 ? PALETTE.ap : s > 0.3 ? PALETTE.amber : PALETTE.bad;
+      ctx.beginPath();
+      ctx.arc(node.x + r - 4, node.y - r + 4, 2.5, 0, TAU);
+      ctx.fill();
     }
 
-    // Highlight if hovered
-    if (this.hoveredNode === node) {
-      this.ctx.strokeStyle = '#ffff00';
-      this.ctx.lineWidth = 3;
-      this.ctx.beginPath();
-      this.ctx.arc(node.x, node.y, node.radius + 5, 0, Math.PI * 2);
-      this.ctx.stroke();
+    // Hover / selection ring.
+    if (hovered) {
+      ctx.strokeStyle = PALETTE.ice;
+      ctx.lineWidth = selected ? 2.5 : 2;
+      ctx.shadowColor = PALETTE.ice;
+      ctx.shadowBlur = selected ? 16 : 12;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, r + (selected ? 7 : 5), 0, TAU);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
     }
 
-    this.ctx.restore();
+    // Labels for infrastructure, featured (active) clients, and hovered/selected.
+    if (!isClient || hovered || active > 0.1) {
+      const label = device.name.length > 22 ? device.name.slice(0, 21) + '…' : device.name;
+      ctx.font = '500 11px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      const ly = node.y + r + 5;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(6, 7, 13, 0.9)';
+      ctx.strokeText(label, node.x, ly);
+      ctx.fillStyle = hovered ? '#f2f5fc' : 'rgba(197, 204, 222, 0.9)';
+      ctx.fillText(label, node.x, ly);
+    }
+
+    ctx.restore();
   }
 
   private renderTooltip(node: VisualizationNode) {
     const { device } = node;
-    const padding = 10;
+    const ctx = this.ctx;
+    const padding = 12;
     const lineHeight = 18;
+    const accent = this.getNodeColor(device);
 
-    const lines = [
-      device.name,
-      `Type: ${device.type}`,
-      `IP: ${device.ip || 'N/A'}`,
-      `Status: ${device.online ? 'Online' : 'Offline'}`,
-    ];
-
-    if (device.latencyMs) {
-      lines.push(`Latency: ${device.latencyMs.toFixed(0)}ms`);
+    const title = device.name;
+    const sub: string[] = [];
+    const rate = (device.txBytes || 0) + (device.rxBytes || 0);
+    if (rate > 0) {
+      sub.push(`↓ ${formatBitrateStr(device.rxBytes || 0)}   ↑ ${formatBitrateStr(device.txBytes || 0)}`);
     }
+    sub.push(device.ip || device.type);
+    if (device.wiredOrWifi === 'wifi' && device.ssid) sub.push(device.ssid);
+    if (!device.online) sub.push('Offline');
+    sub.push('click for details');
 
-    if (device.wiredOrWifi === 'wifi' && device.ssid) {
-      lines.push(`SSID: ${device.ssid}`);
-      if (device.rssi) {
-        lines.push(`Signal: ${device.rssi}dBm`);
-      }
-    }
+    ctx.save();
+    ctx.font = '600 13px Inter, system-ui, sans-serif';
+    const titleW = ctx.measureText(title).width;
+    ctx.font = '12px Inter, system-ui, sans-serif';
+    const subW = Math.max(0, ...sub.map(s => ctx.measureText(s).width));
+    const width = Math.max(titleW, subW) + padding * 2;
+    const height = padding * 2 + lineHeight + sub.length * lineHeight;
 
-    // Calculate dimensions
-    this.ctx.font = '14px monospace';
-    const maxWidth = Math.max(
-      ...lines.map(line => this.ctx.measureText(line).width)
-    );
-    const width = maxWidth + padding * 2;
-    const height = lines.length * lineHeight + padding * 2;
-
-    // Position tooltip
-    let x = node.x + node.radius + 10;
+    let x = node.x + node.radius + 12;
     let y = node.y - height / 2;
+    if (x + width > this.canvas.width) x = node.x - node.radius - width - 12;
+    if (y < 76) y = 76;
+    if (y + height > this.canvas.height) y = this.canvas.height - height - 8;
 
-    // Keep tooltip on screen
-    if (x + width > this.canvas.width) {
-      x = node.x - node.radius - width - 10;
-    }
-    if (y < 0) y = 0;
-    if (y + height > this.canvas.height) y = this.canvas.height - height;
+    // Glass panel with a colored top edge.
+    this.roundRect(x, y, width, height, 10);
+    ctx.fillStyle = 'rgba(16, 20, 33, 0.92)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    this.roundRect(x, y, width, 3, 10);
+    ctx.fill();
 
-    // Draw background
-    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.9)';
-    this.ctx.fillRect(x, y, width, height);
-
-    this.ctx.strokeStyle = '#4488ff';
-    this.ctx.lineWidth = 1;
-    this.ctx.strokeRect(x, y, width, height);
-
-    // Draw text
-    this.ctx.fillStyle = '#ffffff';
-    this.ctx.textAlign = 'left';
-    this.ctx.textBaseline = 'top';
-
-    for (let i = 0; i < lines.length; i++) {
-      this.ctx.fillText(lines[i], x + padding, y + padding + i * lineHeight);
-    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.font = '600 13px Inter, system-ui, sans-serif';
+    ctx.fillStyle = '#f2f5fc';
+    ctx.fillText(title, x + padding, y + padding);
+    ctx.font = '12px Inter, system-ui, sans-serif';
+    sub.forEach((s, i) => {
+      ctx.fillStyle = i === sub.length - 1 ? '#4e576e' : '#95a0b6';
+      ctx.fillText(s, x + padding, y + padding + lineHeight + i * lineHeight);
+    });
+    ctx.restore();
   }
 
-  private updateParticles() {
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life--;
-
-      if (p.life <= 0) {
-        this.particles.splice(i, 1);
-      }
-    }
+  private roundRect(x: number, y: number, w: number, h: number, r: number) {
+    const ctx = this.ctx;
+    const rad = Math.min(r, h / 2, w / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rad);
+    ctx.arcTo(x + w, y + h, x, y + h, rad);
+    ctx.arcTo(x, y + h, x, y, rad);
+    ctx.arcTo(x, y, x + w, y, rad);
+    ctx.closePath();
   }
 
-  private renderParticles() {
-    for (const p of this.particles) {
-      const alpha = p.life / 30;
-      this.ctx.fillStyle = p.color.replace(')', `, ${alpha})`).replace('rgb', 'rgba');
-      this.ctx.beginPath();
-      this.ctx.arc(p.x, p.y, 2, 0, Math.PI * 2);
-      this.ctx.fill();
-    }
-  }
-
-  private generateLightningParticles(weather: WeatherSignals) {
-    const recentLightning = weather.lightningEvents.filter(
-      e => Date.now() - e.ts < 1000
-    );
-
-    for (const lightning of recentLightning) {
-      const node = this.nodes.get(lightning.deviceId);
+  private updateBolts(weather: WeatherSignals) {
+    const now = Date.now();
+    // Spawn a bolt for each fresh lightning event (throttled per device).
+    for (const e of weather.lightningEvents) {
+      if (now - e.ts > 600) continue;
+      const last = this.lastBoltAt.get(e.deviceId) ?? 0;
+      if (now - last < 1200) continue;
+      const node = this.nodes.get(e.deviceId);
       if (!node) continue;
-
-      // Generate lightning effect
-      for (let i = 0; i < 5; i++) {
-        this.particles.push({
-          x: node.x,
-          y: node.y,
-          vx: (Math.random() - 0.5) * 5,
-          vy: (Math.random() - 0.5) * 5,
-          life: 15,
-          color: '#ffff00',
-        });
-      }
+      const parentId = node.device.parentDeviceId;
+      this.bolts.push({ fromId: parentId && this.nodes.has(parentId) ? parentId : e.deviceId, toId: e.deviceId, born: now });
+      this.lastBoltAt.set(e.deviceId, now);
     }
+    // Expire old bolts (~280ms life).
+    this.bolts = this.bolts.filter(b => now - b.born < 280);
+  }
+
+  private renderBolts() {
+    const now = Date.now();
+    const ctx = this.ctx;
+    for (const bolt of this.bolts) {
+      const from = this.nodes.get(bolt.fromId);
+      const to = this.nodes.get(bolt.toId);
+      if (!from || !to) continue;
+      const age = (now - bolt.born) / 280;
+      const alpha = Math.max(0, 1 - age);
+
+      // Jagged midpoint-displacement polyline.
+      const segs = 7;
+      const pts: Array<[number, number]> = [];
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const px = -dy / len;
+      const py = dx / len;
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const jitter = i === 0 || i === segs ? 0 : (Math.sin(i * 99.7 + bolt.born) * 0.5) * 14;
+        pts.push([from.x + dx * t + px * jitter, from.y + dy * t + py * jitter]);
+      }
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      // Outer glow.
+      ctx.strokeStyle = withAlpha(PALETTE.bad, alpha * 0.6);
+      ctx.lineWidth = 5;
+      ctx.shadowColor = PALETTE.bad;
+      ctx.shadowBlur = 14;
+      this.strokePath(pts);
+      // White-hot core.
+      ctx.strokeStyle = withAlpha('#ffffff', alpha);
+      ctx.lineWidth = 1.5;
+      ctx.shadowBlur = 0;
+      this.strokePath(pts);
+      // Flash at the struck node.
+      const flash = ctx.createRadialGradient(to.x, to.y, 0, to.x, to.y, to.radius * 3);
+      flash.addColorStop(0, withAlpha(PALETTE.bad, alpha * 0.5));
+      flash.addColorStop(1, withAlpha(PALETTE.bad, 0));
+      ctx.fillStyle = flash;
+      ctx.beginPath();
+      ctx.arc(to.x, to.y, to.radius * 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  private strokePath(pts: Array<[number, number]>) {
+    const ctx = this.ctx;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.stroke();
   }
 
   private applyFilter(devices: Device[], filter: Filter): Device[] {
@@ -534,49 +838,40 @@ export class NetworkVisualization {
     });
   }
 
-  private getNodeRadius(device: Device): number {
+  private getNodeRadius(device: Device, activity?: number): number {
+    const a = activity ?? this.trafficLevel(device);
     switch (device.type) {
       case 'gateway':
-        return 30;
+        // The WAN anchor stays prominent regardless.
+        return 24;
       case 'switch':
       case 'ap':
-        return 20;
+        // Idle switches recede; ones actually carrying traffic grow.
+        return 11 + a * 11;
       case 'client':
-        return 12;
+        // Idle clients are dim ~3px dots; the busiest grow to ~20px.
+        return 3 + a * 17;
       default:
-        return 15;
+        return 12 + a * 8;
     }
   }
 
   private getNodeColor(device: Device): string {
-    if (!device.online) return '#333333';
-
+    // VLAN mode colors clients by segment; infrastructure keeps its type color.
+    if (this.colorMode === 'vlan' && device.type === 'client' && device.vlanId !== undefined) {
+      return vlanColor(device.vlanId);
+    }
     switch (device.type) {
       case 'gateway':
-        return '#ff9500';
+        return PALETTE.gateway;
       case 'switch':
-        return '#007aff';
+        return PALETTE.switch;
       case 'ap':
-        return '#34c759';
+        return PALETTE.ap;
       case 'client':
-        return '#5856d6';
+        return PALETTE.client;
       default:
         return '#8e8e93';
-    }
-  }
-
-  private getNodeIcon(type: DeviceType): string {
-    switch (type) {
-      case 'gateway':
-        return '⊙';
-      case 'switch':
-        return '⧉';
-      case 'ap':
-        return '📡';
-      case 'client':
-        return '●';
-      default:
-        return '?';
     }
   }
 
@@ -597,5 +892,24 @@ export class NetworkVisualization {
 
   getHoveredNode(): VisualizationNode | null {
     return this.hoveredNode;
+  }
+
+  /** Return the device id at a point, or null. Pads the radius for small dots. */
+  hitTest(x: number, y: number): string | null {
+    let best: { id: string; d: number } | null = null;
+    for (const node of this.nodes.values()) {
+      const d = Math.hypot(x - node.x, y - node.y);
+      const hit = Math.max(node.radius, 9);
+      if (d <= hit && (!best || d < best.d)) best = { id: node.device.id, d };
+    }
+    return best ? best.id : null;
+  }
+
+  setSelected(id: string | null) {
+    this.selectedId = id;
+  }
+
+  setColorMode(mode: ColorMode) {
+    this.colorMode = mode;
   }
 }

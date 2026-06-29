@@ -10,14 +10,16 @@
     "lint": "eslint src --ext .ts"
   },
   "dependencies": {
-    "fastify": "^4.25.2",
     "@fastify/cors": "^8.5.0",
     "@fastify/static": "^6.12.0",
     "axios": "^1.6.5",
+    "better-sqlite3": "^12.11.1",
+    "fastify": "^4.25.2",
     "pino": "^8.17.2",
     "pino-pretty": "^10.3.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^20.10.6",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"

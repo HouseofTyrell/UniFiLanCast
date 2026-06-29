@@ -1,0 +1,111 @@
+.talkers {
+  position: absolute;
+  left: 16px;
+  bottom: 88px;
+  width: 280px;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  z-index: 90;
+}
+
+.talkers-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.talkers-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+}
+
+.talkers-total {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.talkers-empty {
+  font-size: 13px;
+  color: var(--text-faint);
+  padding: 8px 0;
+}
+
+.talkers-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.talker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 0 -6px;
+  padding: 2px 6px;
+  transition: background 0.12s;
+}
+
+.talker:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.talker-icon {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.talker-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.talker-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.talker-name {
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.talker-rate {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.talker-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.talker-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+@media (max-width: 560px) {
+  .talkers { display: none; }
+}

@@ -22,9 +22,9 @@ export function Controls({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <div className="controls">
+    <div className="controls glass">
       <div className="controls-header">
-        <h1>Network Weather Map</h1>
+        <h2>Controls</h2>
         <div className="controls-header-buttons">
           <button
             className="config-button"
@@ -37,7 +37,7 @@ export function Controls({
             className="controls-toggle"
             onClick={() => setIsExpanded(!isExpanded)}
           >
-            {isExpanded ? '▼' : '▲'}
+            {isExpanded ? '▾' : '▴'}
           </button>
         </div>
       </div>
@@ -133,28 +133,6 @@ export function Controls({
             </label>
           </div>
 
-          {/* Legend */}
-          <div className="legend-section">
-            <h3>Legend</h3>
-            <div className="legend-items">
-              <div className="legend-item">
-                <span className="legend-icon gateway">⊙</span>
-                <span>Gateway</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-icon switch">⧉</span>
-                <span>Switch</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-icon ap">📡</span>
-                <span>Access Point</span>
-              </div>
-              <div className="legend-item">
-                <span className="legend-icon client">●</span>
-                <span>Client</span>
-              </div>
-            </div>
-          </div>
         </div>
       )}
     </div>

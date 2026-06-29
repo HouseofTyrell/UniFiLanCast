@@ -17,11 +17,37 @@
       "pollingInterval": 5000,
       "useProxyPrefix": true,
       "verifySsl": false
+    },
+    "integrationApi": {
+      "enabled": false,
+      "baseUrl": "https://192.168.1.1",
+      "apiKeyEnv": "UNIFI_API_KEY",
+      "pollingInterval": 5000,
+      "verifySsl": false
     }
   },
   "server": {
     "port": 3001,
-    "historyRetentionMinutes": 60,
+    "historyRetentionMinutes": 1440,
     "logLevel": "info"
+  },
+  "auth": {
+    "enabled": false,
+    "username": "admin",
+    "passwordEnv": "UNIFI_AUTH_PASSWORD"
+  },
+  "alerts": {
+    "enabled": false,
+    "webhookEnv": "UNIFI_ALERT_WEBHOOK",
+    "format": "auto",
+    "throttleSeconds": 300,
+    "minSeverity": "warning",
+    "rules": {
+      "newDevice": true,
+      "deviceOffline": true,
+      "latencySpike": true,
+      "packetLoss": true,
+      "wanIssue": true
+    }
   }
 }

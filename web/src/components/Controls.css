@@ -1,16 +1,12 @@
 .controls {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(10, 14, 26, 0.95);
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 15px;
-  min-width: 300px;
-  max-width: 400px;
-  max-height: 90vh;
+  top: 80px;
+  right: 16px;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  width: 300px;
+  max-height: calc(100vh - 100px);
   overflow-y: auto;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   z-index: 1000;
 }
 
@@ -18,103 +14,99 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
 }
 
-.controls-header h1 {
-  font-size: 20px;
+.controls-header h2 {
+  font-size: 13px;
+  font-weight: 600;
   margin: 0;
-  color: #ffffff;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 .controls-header-buttons {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
-.config-button {
-  background: #333;
-  border: none;
-  color: #ffffff;
-  padding: 5px 10px;
-  border-radius: 4px;
+.config-button,
+.controls-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  width: 30px;
+  height: 28px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
 .config-button:hover {
-  background: #007aff;
-}
-
-.controls-toggle {
-  background: #333;
-  border: none;
-  color: #ffffff;
-  padding: 5px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
+  background: rgba(64, 156, 255, 0.18);
+  border-color: var(--type-switch);
 }
 
 .controls-toggle:hover {
-  background: #444;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .controls-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
+  margin-top: 14px;
 }
 
 .status-section h3,
 .adapter-section h3,
 .search-section h3,
-.filter-section h3,
-.legend-section h3 {
-  font-size: 14px;
-  margin: 0 0 10px 0;
-  color: #888;
+.filter-section h3 {
+  font-size: 11px;
+  margin: 0 0 8px 0;
+  color: var(--text-faint);
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.6px;
 }
 
 .status-indicator {
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 14px;
+  padding: 7px 11px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
   font-weight: 500;
 }
 
 .status-indicator.connected {
-  background: rgba(52, 199, 89, 0.2);
-  color: #34c759;
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--accent-online);
 }
 
 .status-indicator.disconnected {
-  background: rgba(255, 59, 48, 0.2);
-  color: #ff3b30;
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--accent-bad);
 }
 
 .error-message {
   margin-top: 8px;
   padding: 8px;
-  background: rgba(255, 59, 48, 0.1);
-  border-left: 3px solid #ff3b30;
-  color: #ff3b30;
+  background: rgba(248, 113, 113, 0.1);
+  border-left: 3px solid var(--accent-bad);
+  color: var(--accent-bad);
   font-size: 12px;
   border-radius: 2px;
 }
 
 .adapter-status {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
 }
 
 .adapter-name {
@@ -122,49 +114,48 @@
   justify-content: space-between;
   align-items: center;
   font-weight: 500;
-  margin-bottom: 5px;
-}
-
-.adapter-indicator {
-  font-size: 18px;
+  font-size: 13px;
+  margin-bottom: 4px;
+  text-transform: capitalize;
 }
 
 .adapter-indicator.active {
-  color: #34c759;
+  color: var(--accent-online);
 }
 
 .adapter-indicator.inactive {
-  color: #8e8e93;
+  color: var(--text-faint);
 }
 
 .adapter-info {
   font-size: 12px;
-  color: #888;
+  color: var(--text-dim);
 }
 
 .adapter-error {
   margin-top: 5px;
-  color: #ff3b30;
+  color: var(--accent-bad);
   font-size: 11px;
 }
 
 .search-input {
   width: 100%;
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid #333;
-  border-radius: 4px;
-  color: #ffffff;
-  font-size: 14px;
+  padding: 9px 11px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font);
 }
 
 .search-input:focus {
   outline: none;
-  border-color: #007aff;
+  border-color: var(--type-switch);
 }
 
 .search-input::placeholder {
-  color: #666;
+  color: var(--text-faint);
 }
 
 .filter-checkbox {
@@ -173,71 +164,25 @@
   margin-bottom: 8px;
   cursor: pointer;
   user-select: none;
+  font-size: 13px;
+  color: var(--text);
 }
 
 .filter-checkbox input[type='checkbox'] {
   margin-right: 8px;
   cursor: pointer;
+  accent-color: var(--type-switch);
 }
 
-.filter-checkbox span {
-  font-size: 14px;
-}
-
-.legend-items {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-}
-
-.legend-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-}
-
-.legend-icon.gateway {
-  background: #ff9500;
-}
-
-.legend-icon.switch {
-  background: #007aff;
-}
-
-.legend-icon.ap {
-  background: #34c759;
-}
-
-.legend-icon.client {
-  background: #5856d6;
-}
-
-/* Scrollbar styling */
 .controls::-webkit-scrollbar {
   width: 8px;
 }
 
 .controls::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  background: transparent;
 }
 
 .controls::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
-}
-
-.controls::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
 }

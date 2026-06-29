@@ -1,0 +1,103 @@
+.legend {
+  position: absolute;
+  right: 16px;
+  bottom: 88px;
+  width: 200px;
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 90;
+}
+
+.legend-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.legend-toggle-label {
+  font-size: 10px;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.legend-seg {
+  display: inline-flex;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-hairline);
+  border-radius: 7px;
+  padding: 2px;
+}
+
+.legend-seg button {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.legend-seg button.on {
+  background: rgba(93, 210, 240, 0.16);
+  color: var(--text-hi);
+}
+
+.legend-swatches,
+.legend-weather {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-glyph {
+  width: 14px;
+  text-align: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  color: var(--text-base);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.legend-desc {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+
+.legend-empty {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+@media (max-width: 560px) {
+  .legend { display: none; }
+}

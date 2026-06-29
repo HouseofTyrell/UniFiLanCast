@@ -42,14 +42,18 @@ export function useNetworkData() {
 
     connectStream();
 
-    // Fetch adapter status periodically
+    // Fetch adapter status periodically. Tolerate transient blips (e.g. the dev
+    // server restarting) without spamming errors: skip non-OK / empty bodies.
     const statusInterval = setInterval(async () => {
       try {
         const response = await fetch('/api/status');
-        const data = await response.json();
-        setAdapters(data.adapters);
-      } catch (err) {
-        console.error('Failed to fetch adapter status:', err);
+        if (!response.ok) return;
+        const text = await response.text();
+        if (!text) return;
+        const data = JSON.parse(text);
+        if (Array.isArray(data.adapters)) setAdapters(data.adapters);
+      } catch {
+        // Backend momentarily unavailable; next tick will recover.
       }
     }, 10000);
 
@@ -64,10 +68,13 @@ export function useNetworkData() {
   const fetchHistory = async (minutes: number = 60) => {
     try {
       const response = await fetch(`/api/history?minutes=${minutes}`);
-      const data = await response.json();
-      setHistory(data);
-    } catch (err) {
-      console.error('Failed to fetch history:', err);
+      if (!response.ok) return;
+      const text = await response.text();
+      if (!text) return;
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) setHistory(data);
+    } catch {
+      // Transient; the user can retry from the UI.
     }
   };
 
