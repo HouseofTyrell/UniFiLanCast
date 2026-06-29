@@ -9,9 +9,10 @@ interface NetworkCanvasProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   colorMode: ColorMode;
+  usageMap: Record<string, { down: number; up: number }>;
 }
 
-export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMode }: NetworkCanvasProps) {
+export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMode, usageMap }: NetworkCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const visualizationRef = useRef<NetworkVisualization | null>(null);
   const animationFrameRef = useRef<number | null>(null);
@@ -69,6 +70,10 @@ export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMod
   useEffect(() => {
     visualizationRef.current?.setColorMode(colorMode);
   }, [colorMode]);
+
+  useEffect(() => {
+    visualizationRef.current?.setUsageMap(usageMap);
+  }, [usageMap]);
 
   useEffect(() => {
     if (!visualizationRef.current || !snapshot) return;

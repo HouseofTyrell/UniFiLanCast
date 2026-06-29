@@ -12,6 +12,7 @@ import { Segments } from './components/Segments';
 import { Events } from './components/Events';
 import { useNetworkData } from './hooks/useNetworkData';
 import { useRollingData } from './hooks/useRollingData';
+import { useDeviceUsages } from './hooks/useDeviceUsages';
 import { Filter, NetworkSnapshot } from './types';
 import { ColorMode } from './utils/vlan';
 import './App.css';
@@ -30,6 +31,9 @@ function App() {
   const [showConfig, setShowConfig] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>('type');
+  // Global usage window — drives the panels AND the node sizing.
+  const [windowMinutes, setWindowMinutes] = useState(60);
+  const deviceUsage = useDeviceUsages(windowMinutes);
 
   const handleSnapshotChange = useCallback((historySample: any) => {
     setPlaybackSnapshot(historySample);
@@ -50,9 +54,14 @@ function App() {
       <div className="layout">
         <aside className="rail rail-left">
           {selectedDevice ? (
-            <DeviceDetail device={selectedDevice} onClose={() => setSelectedId(null)} />
+            <DeviceDetail
+              device={selectedDevice}
+              onClose={() => setSelectedId(null)}
+              minutes={windowMinutes}
+              onMinutesChange={setWindowMinutes}
+            />
           ) : (
-            <WanChart data={wanHistory} />
+            <WanChart data={wanHistory} minutes={windowMinutes} onMinutesChange={setWindowMinutes} />
           )}
           <Events events={events} />
           <TopTalkers snapshot={displaySnapshot} onSelect={setSelectedId} />
@@ -65,6 +74,7 @@ function App() {
             selectedId={selectedId}
             onSelect={setSelectedId}
             colorMode={colorMode}
+            usageMap={deviceUsage}
           />
           <TimePlayback
             history={history}

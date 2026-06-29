@@ -46,14 +46,29 @@ export async function registerApiRoutes(
    * GET /api/usage - Total WAN data transferred over a recent window
    */
   fastify.get<{
-    Querystring: { minutes?: string };
+    Querystring: { minutes?: string; deviceId?: string };
   }>('/api/usage', async (request, reply) => {
     try {
       const minutes = Math.max(1, Math.min(1440, parseInt(request.query.minutes || '60', 10)));
-      return dataManager.getWanUsage(minutes);
+      return dataManager.getWanUsage(minutes, request.query.deviceId);
     } catch (error) {
       logger.error({ error }, 'Failed to get usage');
       reply.code(500).send({ error: 'Failed to get usage' });
+    }
+  });
+
+  /**
+   * GET /api/usage/devices - Per-device data usage over a recent window
+   */
+  fastify.get<{
+    Querystring: { minutes?: string };
+  }>('/api/usage/devices', async (request, reply) => {
+    try {
+      const minutes = Math.max(1, Math.min(1440, parseInt(request.query.minutes || '60', 10)));
+      return dataManager.getDeviceUsages(minutes);
+    } catch (error) {
+      logger.error({ error }, 'Failed to get device usage');
+      reply.code(500).send({ error: 'Failed to get device usage' });
     }
   });
 

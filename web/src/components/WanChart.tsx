@@ -5,6 +5,8 @@ import './WanChart.css';
 
 interface Props {
   data: WanPoint[];
+  minutes: number;
+  onMinutesChange: (m: number) => void;
 }
 
 const W = 248;
@@ -33,8 +35,7 @@ function path(points: number[], max: number): string {
     .join(' ');
 }
 
-export function WanChart({ data }: Props) {
-  const [minutes, setMinutes] = useState(60);
+export function WanChart({ data, minutes, onMinutesChange }: Props) {
   const [usage, setUsage] = useState<Usage | null>(null);
 
   useEffect(() => {
@@ -74,7 +75,7 @@ export function WanChart({ data }: Props) {
         <select
           className="wan-window"
           value={minutes}
-          onChange={e => setMinutes(Number(e.target.value))}
+          onChange={e => onMinutesChange(Number(e.target.value))}
         >
           {WINDOWS.map(w => (
             <option key={w.minutes} value={w.minutes}>last {w.label}</option>

@@ -60,6 +60,10 @@ export class NetworkVisualization {
   private phaseCache = new Map<string, number>();
   // Time-smoothed activity (0..1) per device id.
   private activityCache = new Map<string, number>();
+  // Per-device data usage over the selected window (bytes), and per-type maxima.
+  private usageMap: Record<string, { down: number; up: number }> = {};
+  private maxClientUsage = 0;
+  private maxInfraUsage = 0;
 
   // Focus pass: ids of the hovered/selected node + ancestors (or null).
   private focusSet: Set<string> | null = null;
@@ -105,14 +109,40 @@ export class NetworkVisualization {
     return this.rateLevel((device.txBytes || 0) + (device.rxBytes || 0));
   }
 
+  /** Per-device usage over the window; drives node size/brightness when present. */
+  setUsageMap(map: Record<string, { down: number; up: number }>) {
+    this.usageMap = map || {};
+    this.maxClientUsage = 0;
+    this.maxInfraUsage = 0;
+    for (const [id, u] of Object.entries(this.usageMap)) {
+      const total = (u.down || 0) + (u.up || 0);
+      const type = this.nodes.get(id)?.device.type;
+      if (type === 'client') this.maxClientUsage = Math.max(this.maxClientUsage, total);
+      else if (type && type !== 'gateway') this.maxInfraUsage = Math.max(this.maxInfraUsage, total);
+    }
+  }
+
+  /** Normalize a device's windowed usage to 0..1, relative to its tier's max. */
+  private usageLevel(device: Device): number {
+    const u = this.usageMap[device.id];
+    const bytes = u ? (u.down || 0) + (u.up || 0) : 0;
+    if (bytes <= 0) return 0;
+    const max = device.type === 'client' ? this.maxClientUsage : this.maxInfraUsage;
+    if (max <= 0) return 0;
+    const lo = Math.log10(Math.max(1e5, max * 0.003));
+    const hi = Math.log10(max);
+    return Math.max(0, Math.min(1, (Math.log10(bytes) - lo) / Math.max(0.001, hi - lo)));
+  }
+
   /**
-   * Advance the time-smoothed activity for every device once per frame.
-   * Snapshots arrive in ~5s steps; easing toward the live value makes
-   * size/brightness/pull glide instead of popping when a new snapshot lands.
+   * Advance the time-smoothed activity for every device once per frame. When a
+   * usage window is active, size/brightness reflect DATA USED over the window;
+   * otherwise they fall back to the live rate. Easing makes changes glide.
    */
   private tickActivity(devices: Device[]) {
+    const useUsage = Object.keys(this.usageMap).length > 0;
     for (const d of devices) {
-      const raw = this.trafficLevel(d);
+      const raw = useUsage ? this.usageLevel(d) : this.trafficLevel(d);
       const prev = this.activityCache.get(d.id);
       this.activityCache.set(d.id, prev === undefined ? raw : prev + (raw - prev) * 0.05);
     }
@@ -194,9 +224,10 @@ export class NetworkVisualization {
   }
 
   /**
-   * Tiered top-down layout: the gateway on top, switches/APs in a row beneath
-   * it, then clients in a few generously-spaced rows below. Order is stable
-   * (clients grouped by uplink), so live traffic never reshuffles seats.
+   * Hybrid tiered + clustered layout: the gateway on top, switches/APs in a row
+   * beneath it, and each hub's own clients packed into a grid directly below it.
+   * Hubs get horizontal room proportional to their client count, and the
+   * busiest hub is centered. Order is stable, so traffic never reshuffles seats.
    */
   private computeRadialTargets(
     devices: Device[],
@@ -204,59 +235,94 @@ export class NetworkVisualization {
   ) {
     const W = this.canvas.width;
     const H = this.canvas.height;
-    const padX = 56;
+    const padX = 48;
     const left = padX;
     const usableW = Math.max(1, W - padX * 2);
     const cx = W / 2;
 
-    const gateways = devices.filter(d => d.type === 'gateway');
+    const gateway = devices.find(d => d.type === 'gateway');
     const infra = devices
       .filter(d => d.type !== 'client' && d.type !== 'gateway')
       .sort((a, b) => a.name.localeCompare(b.name));
-    // Clients grouped by their uplink device, then by name — a stable order.
-    const clients = devices
-      .filter(d => d.type === 'client')
-      .sort(
-        (a, b) =>
-          (a.parentDeviceId || '').localeCompare(b.parentDeviceId || '') ||
-          a.name.localeCompare(b.name)
-      );
+    const infraIds = new Set(infra.map(d => d.id));
 
-    // Vertical bands.
-    const topY = 64;
-    const gatewayY = topY;
-    const infraY = topY + 110;
-    const clientTop = topY + 220;
-    const clientBottom = H - 70;
+    // Group clients by their owning hub (parent if it's infra, else the gateway).
+    const byOwner = new Map<string, Device[]>();
+    for (const d of devices) {
+      if (d.type !== 'client') continue;
+      const owner = d.parentDeviceId && infraIds.has(d.parentDeviceId) ? d.parentDeviceId : 'gw';
+      (byOwner.get(owner) || byOwner.set(owner, []).get(owner)!).push(d);
+    }
+    for (const arr of byOwner.values()) arr.sort((a, b) => a.id.localeCompare(b.id));
 
-    const rowAt = (items: Device[], y: number) => {
-      items.forEach((d, i) => {
-        const node = this.nodes.get(d.id);
-        if (!node) return;
-        const x = items.length === 1 ? cx : left + (usableW * (i + 0.5)) / items.length;
-        node.targetX = x;
-        node.targetY = y;
-      });
-    };
+    // One column per infra hub (+ a gateway column if any clients hang off it).
+    type Col = { node?: Device; clients: Device[] };
+    const cols: Col[] = infra.map(d => ({ node: d, clients: byOwner.get(d.id) || [] }));
+    const gwClients = byOwner.get('gw') || [];
+    if (gwClients.length) cols.push({ node: undefined, clients: gwClients });
 
-    rowAt(gateways.length ? gateways : infra.slice(0, 1), gatewayY);
-    rowAt(infra, infraY);
-
-    // Clients in a grid: generous spacing, as many rows as needed.
-    const minSpacing = 50;
-    const cols = Math.max(1, Math.min(clients.length, Math.floor(usableW / minSpacing)));
-    const rows = Math.max(1, Math.ceil(clients.length / cols));
-    const colStep = usableW / cols;
-    const rowSpan = clientBottom - clientTop;
-    const rowStep = rows > 1 ? rowSpan / (rows - 1) : 0;
-    clients.forEach((d, i) => {
-      const node = this.nodes.get(d.id);
-      if (!node) return;
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      node.targetX = left + colStep * (col + 0.5);
-      node.targetY = rows > 1 ? clientTop + rowStep * row : (clientTop + clientBottom) / 2;
+    // Arrange columns biggest-in-the-center so the dominant cluster is centered.
+    const bySize = [...cols].sort((a, b) => b.clients.length - a.clients.length);
+    const ordered: Col[] = new Array(bySize.length);
+    let li = Math.floor((bySize.length - 1) / 2);
+    let ri = li + 1;
+    bySize.forEach((c, i) => {
+      if (i % 2 === 0) ordered[li--] = c;
+      else ordered[ri++] = c;
     });
+
+    // Band width ∝ client count (softened) so big clusters get room but small
+    // hubs still get a visible slot.
+    const weightOf = (c: Col) => Math.sqrt(c.clients.length) + 0.9;
+    const totalW = ordered.reduce((s, c) => s + weightOf(c), 0) || 1;
+
+    const gatewayY = 58;
+    const infraY = 162;
+    const clientTop = 244;
+    const clientBottom = H - 60;
+    const clientH = clientBottom - clientTop;
+
+    let curX = left;
+    for (const c of ordered) {
+      const bandW = (usableW * weightOf(c)) / totalW;
+      const bandCx = curX + bandW / 2;
+      if (c.node) {
+        const node = this.nodes.get(c.node.id);
+        if (node) {
+          node.targetX = bandCx;
+          node.targetY = infraY;
+        }
+      }
+      // Pack this hub's clients into an organic phyllotaxis (sunflower) cluster
+      // hanging below it — a natural blob, not a rigid grid. Spacing adapts so
+      // the blob fits both its band width and the vertical space.
+      const n = c.clients.length;
+      if (n > 0) {
+        const sqn = Math.sqrt(n);
+        const cspace = Math.min(28, (bandW * 0.46) / sqn, (clientH * 0.46) / sqn);
+        const discR = cspace * sqn;
+        const clusterY = clientTop + discR + 14;
+        const rot = this.nodePhase(c.node ? c.node.id : 'gw');
+        c.clients.forEach((d, i) => {
+          const node = this.nodes.get(d.id);
+          if (!node) return;
+          const rr = cspace * Math.sqrt(i + 0.5);
+          const ang = i * 2.399963 + rot;
+          const ph = this.nodePhase(d.id);
+          node.targetX = bandCx + Math.cos(ang) * rr + Math.cos(ph) * 5;
+          node.targetY = clusterY + Math.sin(ang) * rr + Math.sin(ph * 1.7) * 5;
+        });
+      }
+      curX += bandW;
+    }
+
+    if (gateway) {
+      const node = this.nodes.get(gateway.id);
+      if (node) {
+        node.targetX = cx;
+        node.targetY = gatewayY;
+      }
+    }
 
     this.layoutCx = cx;
     this.layoutCy = (gatewayY + clientBottom) / 2;

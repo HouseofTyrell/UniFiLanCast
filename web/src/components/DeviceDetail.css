@@ -93,11 +93,46 @@
   letter-spacing: 0.4px;
 }
 
+.dd-usage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.dd-usage-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+.dd-usage-window {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-base);
+  font-size: 11px;
+  font-family: var(--font);
+  border-radius: 6px;
+  padding: 2px 5px;
+  cursor: pointer;
+}
+
 .dd-totals {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dd-session {
+  font-size: 11.5px;
+  color: var(--text-faint);
   margin-bottom: 16px;
+}
+.dd-session .tabular {
+  color: var(--text-dim);
 }
 
 .dd-total {

@@ -108,20 +108,23 @@ export class DataManager extends EventEmitter {
   }
 
   /**
-   * Total WAN data transferred over the last `minutes`, by integrating the
-   * gateway's down/up rate (bits/sec) across the persisted history. Returns
+   * Total data transferred over the last `minutes`, by integrating a device's
+   * down/up rate (bits/sec) across the persisted history. Defaults to the
+   * gateway (WAN); pass a deviceId for a specific client/device. Returns
    * cumulative bytes plus a downsampled rate series for a sparkline.
    */
-  getWanUsage(minutes: number): {
+  getWanUsage(minutes: number, deviceId?: string): {
     minutes: number;
     downBytes: number;
     upBytes: number;
     series: Array<{ t: number; down: number; up: number }>;
   } {
     const samples = this.getHistory(minutes);
+    const pick = (s: HistorySample) =>
+      deviceId ? s.devices.find(d => d.id === deviceId) : s.devices.find(d => d.type === 'gateway');
     const series = samples.map(s => {
-      const gw = s.devices.find(d => d.type === 'gateway');
-      return { t: s.timestamp, down: gw?.rxBytes ?? 0, up: gw?.txBytes ?? 0 };
+      const dev = pick(s);
+      return { t: s.timestamp, down: dev?.rxBytes ?? 0, up: dev?.txBytes ?? 0 };
     });
 
     let downBytes = 0;
@@ -142,6 +145,28 @@ export class DataManager extends EventEmitter {
 
   getAdapterStatus() {
     return this.adapters.map(a => a.getStatus());
+  }
+
+  /**
+   * Per-device data usage (down/up bytes) over the last `minutes`, integrating
+   * each device's rate across the persisted history in a single pass.
+   */
+  getDeviceUsages(minutes: number): Record<string, { down: number; up: number }> {
+    const samples = this.getHistory(minutes);
+    const totals: Record<string, { down: number; up: number }> = {};
+    for (let i = 1; i < samples.length; i++) {
+      const dt = (samples[i].timestamp - samples[i - 1].timestamp) / 1000;
+      if (dt <= 0 || dt > 180) continue;
+      const prev = new Map(samples[i - 1].devices.map(d => [d.id, d]));
+      for (const d of samples[i].devices) {
+        const p = prev.get(d.id);
+        if (!p) continue;
+        const t = totals[d.id] || (totals[d.id] = { down: 0, up: 0 });
+        t.down += (((p.rxBytes ?? 0) + (d.rxBytes ?? 0)) / 2) * dt / 8;
+        t.up += (((p.txBytes ?? 0) + (d.txBytes ?? 0)) / 2) * dt / 8;
+      }
+    }
+    return totals;
   }
 
   /**
