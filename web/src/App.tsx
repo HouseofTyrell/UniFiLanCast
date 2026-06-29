@@ -47,8 +47,17 @@ function App() {
   // Rolling history accumulated from the live stream (not playback).
   const { wanHistory, events } = useRollingData(snapshot);
 
+  // Make simulated data unmistakable: the mock adapter is only ever active when
+  // explicitly enabled, but if it is, say so loudly.
+  const simulated = adapters.some(a => a.name === 'mock' && a.connected);
+
   return (
     <div className="app">
+      {simulated && (
+        <div className="sim-banner" role="status">
+          ⚠ SIMULATED DATA — the mock adapter is active; this is not your real network.
+        </div>
+      )}
       <Header snapshot={displaySnapshot} isConnected={isConnected} />
 
       <div className="layout">

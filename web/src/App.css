@@ -6,6 +6,24 @@
   flex-direction: column;
 }
 
+.sim-banner {
+  flex: 0 0 auto;
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: #1a1206;
+  background: repeating-linear-gradient(
+    45deg,
+    #f5a623,
+    #f5a623 14px,
+    #e0901a 14px,
+    #e0901a 28px
+  );
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+}
+
 .layout {
   flex: 1;
   min-height: 0;

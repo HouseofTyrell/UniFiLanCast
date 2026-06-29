@@ -33,6 +33,7 @@ export class DataManager extends EventEmitter {
   private isRunning = false;
   private latestSnapshot?: NetworkSnapshot;
   private lastPersistedAt = 0;
+  private captureInFlight?: Promise<NetworkSnapshot>;
 
   constructor(adapters: NetworkAdapter[], options: DataManagerOptions = {}) {
     super();
@@ -178,7 +179,21 @@ export class DataManager extends EventEmitter {
    * Collect adapter data, compute weather, persist, and emit an update.
    * Returns the freshly built snapshot.
    */
-  private async captureSnapshot(): Promise<NetworkSnapshot> {
+  /**
+   * Single-flight capture: if a capture is already running, callers share its
+   * promise instead of starting an overlapping one. This keeps a slow controller
+   * from building an unbounded backlog or emitting out-of-order snapshots.
+   */
+  private captureSnapshot(): Promise<NetworkSnapshot> {
+    if (this.captureInFlight) return this.captureInFlight;
+    this.captureInFlight = this.doCapture().finally(() => {
+      this.captureInFlight = undefined;
+    });
+    return this.captureInFlight;
+  }
+
+  private async doCapture(): Promise<NetworkSnapshot> {
+    const started = Date.now();
     const snapshot = await this.buildSnapshot();
 
     // Durable device inventory + genuine new-device detection (restart-safe).
@@ -216,6 +231,11 @@ export class DataManager extends EventEmitter {
     this.weatherEngine.addToHistory(snapshot);
     this.latestSnapshot = snapshot;
     this.emit('update', snapshot);
+
+    const duration = Date.now() - started;
+    if (duration > this.captureIntervalMs) {
+      logger.warn({ durationMs: duration }, 'Capture exceeded the capture interval');
+    }
     return snapshot;
   }
 

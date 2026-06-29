@@ -1,9 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { readFile, writeFile, rename } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join } from 'path';
 import { DataManager } from '../DataManager.js';
 import { logger } from '../utils/logger.js';
+import { resolveConfigPath } from '../utils/paths.js';
 import { Config } from '../models/types.js';
 
 /** Mask a secret-bearing string so the value never leaves the server. */
@@ -27,9 +27,12 @@ function redactConfig(config: any): any {
 }
 
 /** Minimal runtime validation for a posted config (types are compile-time only). */
+const ALLOWED_CONFIG_KEYS = new Set(['adapters', 'server', 'auth', 'alerts']);
 function validateConfig(body: unknown): string | null {
   if (!body || typeof body !== 'object') return 'Body must be a JSON object';
   const c = body as any;
+  const unknown = Object.keys(c).filter(k => !ALLOWED_CONFIG_KEYS.has(k));
+  if (unknown.length) return `Unknown configuration key(s): ${unknown.join(', ')}`;
   if (!c.adapters || typeof c.adapters !== 'object') return 'Missing or invalid "adapters"';
   if (!c.server || typeof c.server !== 'object') return 'Missing or invalid "server"';
   if (c.server.port !== undefined && typeof c.server.port !== 'number') return '"server.port" must be a number';
@@ -105,6 +108,26 @@ export async function registerApiRoutes(
   });
 
   /**
+   * GET /api/events - Persisted recent events (so the feed survives refreshes).
+   * Optional filters: limit (1..500), severity, type.
+   */
+  fastify.get<{
+    Querystring: { limit?: string; severity?: string; type?: string };
+  }>('/api/events', async (request, reply) => {
+    try {
+      const limit = Math.max(1, Math.min(500, parseInt(request.query.limit || '100', 10) || 100));
+      let events = dataManager.getRecentEvents(limit);
+      const { severity, type } = request.query;
+      if (severity) events = events.filter(e => e.severity === severity);
+      if (type) events = events.filter(e => e.type === type);
+      return events;
+    } catch (error) {
+      logger.error({ error }, 'Failed to get events');
+      reply.code(500).send({ error: 'Failed to get events' });
+    }
+  });
+
+  /**
    * GET /api/status - Get adapter status
    */
   fastify.get('/api/status', async (request, reply) => {
@@ -169,7 +192,7 @@ export async function registerApiRoutes(
    */
   fastify.get('/api/config', async (request, reply) => {
     try {
-      const configPath = process.env.CONFIG_PATH || join(process.cwd(), 'config.json');
+      const configPath = resolveConfigPath();
 
       if (!existsSync(configPath)) {
         // Return default config if file doesn't exist
@@ -215,9 +238,9 @@ export async function registerApiRoutes(
    */
   fastify.post<{
     Body: Config;
-  }>('/api/config', async (request, reply) => {
+  }>('/api/config', { bodyLimit: 256 * 1024 }, async (request, reply) => {
     try {
-      const configPath = process.env.CONFIG_PATH || join(process.cwd(), 'config.json');
+      const configPath = resolveConfigPath();
       const config = request.body as any;
 
       const error = validateConfig(config);

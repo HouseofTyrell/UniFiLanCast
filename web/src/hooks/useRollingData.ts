@@ -17,6 +17,25 @@ export function useRollingData(snapshot: NetworkSnapshot | null) {
   const lastTs = useRef(0);
   const seen = useRef<Set<string>>(new Set());
 
+  // Seed the feed from persisted events so it survives a page refresh; prime the
+  // dedupe set so live SSE events don't re-add what we just loaded.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/events?limit=${MAX_EVENTS}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: NetworkEvent[]) => {
+        if (cancelled || !Array.isArray(data)) return;
+        data.forEach(e => seen.current.add(`${e.ts}:${e.message}`));
+        setEvents(prev => (prev.length ? prev : data.slice(0, MAX_EVENTS)));
+      })
+      .catch(() => {
+        /* persisted events are best-effort */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (!snapshot || snapshot.timestamp === lastTs.current) return;
     lastTs.current = snapshot.timestamp;

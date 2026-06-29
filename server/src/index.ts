@@ -13,25 +13,9 @@ import { LocalNetworkAdapter } from './adapters/LocalNetworkAdapter.js';
 import { IntegrationApiAdapter } from './adapters/IntegrationApiAdapter.js';
 import { registerApiRoutes } from './routes/api.js';
 import { logger } from './utils/logger.js';
+import { findUp, resolveConfigPath } from './utils/paths.js';
 import { Config } from './models/types.js';
 import { NetworkAdapter } from './models/adapter.js';
-
-/**
- * Walk up from the current directory looking for a file. Lets the server find
- * the repo-root `config.json` / `.env` whether it's launched from the repo root
- * (production) or from `server/` (the `npm run dev` workspace cwd).
- */
-function findUp(filename: string, maxDepth = 4): string | undefined {
-  let dir = process.cwd();
-  for (let i = 0; i <= maxDepth; i++) {
-    const candidate = join(dir, filename);
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return undefined;
-}
 
 /**
  * Minimal .env loader (no dependency). Populates process.env from the nearest
@@ -62,8 +46,7 @@ function loadEnvFile(): void {
  * Load configuration from file or use defaults
  */
 function loadConfig(): Config {
-  const configPath =
-    process.env.CONFIG_PATH || findUp('config.json') || join(process.cwd(), 'config.json');
+  const configPath = resolveConfigPath();
 
   if (existsSync(configPath)) {
     logger.info(`Loading config from ${configPath}`);
@@ -126,27 +109,34 @@ function initializeAdapters(config: Config): NetworkAdapter[] {
     const cfg = config.adapters.integrationApi;
     const apiKey = cfg.apiKey || process.env[cfg.apiKeyEnv || 'UNIFI_API_KEY'] || '';
     if (!apiKey) {
+      // Fail closed: a configured real adapter must never silently degrade to
+      // simulated data (a failed setup would otherwise look healthy).
       logger.error(
         `Integration API adapter enabled but no API key found ` +
-          `(set ${cfg.apiKeyEnv || 'UNIFI_API_KEY'} or config.adapters.integrationApi.apiKey)`
+          `(set ${cfg.apiKeyEnv || 'UNIFI_API_KEY'} or config.adapters.integrationApi.apiKey). Refusing to start.`
       );
-    } else {
-      logger.info('Enabling Integration API adapter');
-      adapters.push(
-        new IntegrationApiAdapter({
-          baseUrl: cfg.baseUrl,
-          apiKey,
-          siteId: cfg.siteId,
-          pollingInterval: cfg.pollingInterval,
-          verifySsl: cfg.verifySsl,
-        })
-      );
+      process.exit(1);
     }
+    logger.info('Enabling Integration API adapter');
+    adapters.push(
+      new IntegrationApiAdapter({
+        baseUrl: cfg.baseUrl,
+        apiKey,
+        siteId: cfg.siteId,
+        pollingInterval: cfg.pollingInterval,
+        verifySsl: cfg.verifySsl,
+      })
+    );
   }
 
+  // No silent mock fallback. Mock data is only ever shown when explicitly
+  // enabled (config.adapters.mock). If nothing is configured, fail loudly.
   if (adapters.length === 0) {
-    logger.warn('No adapters enabled, enabling mock adapter as fallback');
-    adapters.push(new MockAdapter(30));
+    logger.error(
+      'No adapters enabled. Enable a real adapter (integrationApi/localNetwork/siteManager) ' +
+        'or set adapters.mock.enabled = true for simulated data. Refusing to start.'
+    );
+    process.exit(1);
   }
 
   return adapters;
@@ -158,6 +148,11 @@ function initializeAdapters(config: Config): NetworkAdapter[] {
 async function main() {
   loadEnvFile();
   const config = loadConfig();
+
+  // Honor the configured log level (env LOG_LEVEL still wins if set explicitly).
+  if (!process.env.LOG_LEVEL && config.server.logLevel) {
+    logger.level = config.server.logLevel;
+  }
 
   // Create Fastify instance
   const fastify = Fastify({
@@ -224,8 +219,7 @@ async function main() {
   // it's found whether the server runs from the repo root or from server/.
   let store: Store | undefined;
   try {
-    const configPath = process.env.CONFIG_PATH || findUp('config.json');
-    const root = configPath ? dirname(configPath) : process.cwd();
+    const root = dirname(resolveConfigPath());
     const dataDir = process.env.DATA_DIR || config.server.dataDir || join(root, 'data');
     store = new Store(join(dataDir, 'weather.db'));
   } catch (error) {
@@ -262,9 +256,6 @@ async function main() {
   // Register API routes
   await registerApiRoutes(fastify, dataManager);
 
-  // Start data manager
-  await dataManager.start();
-
   // Graceful shutdown
   const shutdown = async () => {
     logger.info('Shutting down...');
@@ -297,6 +288,12 @@ async function main() {
     logger.error({ error }, 'Failed to start server');
     process.exit(1);
   }
+
+  // Start capturing AFTER the server is listening, so the API/SSE are reachable
+  // immediately even while adapters initialize or a controller is unavailable.
+  dataManager.start().catch(error => {
+    logger.error({ error }, 'Data manager failed to start');
+  });
 }
 
 // Start the application
