@@ -1,5 +1,6 @@
 import {
   Device,
+  DeviceType,
   Link,
   WeatherSignals,
   VisualizationNode,
@@ -19,6 +20,7 @@ const PALETTE = {
   ice: '#5dd2f0',
   amber: '#f2b441',
   bad: '#f2615c',
+  heat: '#ff7a45', // device-load heat — distinct from the gateway's gold
 };
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -45,16 +47,14 @@ export class NetworkVisualization {
   private selectedId: string | null = null;
   private colorMode: ColorMode = 'type';
   private animationFrame = 0;
-  private deviceIcons: Map<string, HTMLImageElement> = new Map();
-  private iconsLoaded = false;
 
   // Radial-tree layout geometry (computed each frame).
   private layoutCx = 0;
   private layoutCy = 0;
   private ringRadii: number[] = [];
 
-  // Ambient starfield dust (seeded once, normalized 0..1 coords).
-  private stars: Array<{ x: number; y: number; a: number; r: number }> = [];
+  // Ambient starfield dust (seeded once; d = depth for parallax, p = twinkle phase).
+  private stars: Array<{ x: number; y: number; a: number; r: number; d: number; p: number }> = [];
 
   // Stable drift phase per node id.
   private phaseCache = new Map<string, number>();
@@ -73,19 +73,23 @@ export class NetworkVisualization {
     this.ctx = canvas.getContext('2d')!;
     this.seedStars();
     this.resize();
-    this.loadDeviceIcons();
   }
 
   private seedStars() {
     // Deterministic pseudo-random so the field doesn't reshuffle each frame.
     let s = 1337;
     const rnd = () => ((s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-    this.stars = Array.from({ length: 70 }, () => ({
-      x: rnd(),
-      y: rnd(),
-      a: 0.03 + rnd() * 0.06,
-      r: rnd() < 0.85 ? 1 : 1.5,
-    }));
+    this.stars = Array.from({ length: 220 }, () => {
+      const d = rnd(); // depth: 0 = far/dim/slow, 1 = near/bright/fast
+      return {
+        x: rnd(),
+        y: rnd(),
+        a: 0.03 + d * 0.1,
+        r: 0.6 + d * 1.2,
+        d,
+        p: rnd() * Math.PI * 2,
+      };
+    });
   }
 
   /** Normalize a rate (bits/sec) to 0..1 on a log scale (~50Kbps..~50Mbps). */
@@ -119,43 +123,12 @@ export class NetworkVisualization {
     return this.activityCache.get(device.id) ?? this.trafficLevel(device);
   }
 
-  private loadDeviceIcons() {
-    const iconPaths = {
-      gateway: '/icons/device-gateway.svg',
-      switch: '/icons/device-switch.svg',
-      ap: '/icons/device-ap.svg',
-      client: '/icons/device-laptop.svg',
-      server: '/icons/device-server.svg',
-      router: '/icons/device-router.svg',
-      cloud: '/icons/device-cloud.svg',
-    };
-
-    let loadedCount = 0;
-    const totalIcons = Object.keys(iconPaths).length;
-
-    for (const [type, path] of Object.entries(iconPaths)) {
-      const img = new Image();
-      img.onload = () => {
-        loadedCount++;
-        if (loadedCount === totalIcons) {
-          this.iconsLoaded = true;
-        }
-      };
-      img.onerror = () => {
-        console.warn(`Failed to load icon: ${path}`);
-        loadedCount++;
-        if (loadedCount === totalIcons) {
-          this.iconsLoaded = true;
-        }
-      };
-      img.src = path;
-      this.deviceIcons.set(type, img);
-    }
-  }
-
   resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    // Size the drawing buffer to the canvas's CSS box (the stage column),
+    // accounting for device pixel ratio for crisp rendering.
+    const rect = this.canvas.getBoundingClientRect();
+    this.canvas.width = Math.max(1, Math.round(rect.width));
+    this.canvas.height = Math.max(1, Math.round(rect.height));
   }
 
   updateLayout(devices: Device[], _links: Link[]) {
@@ -210,150 +183,84 @@ export class NetworkVisualization {
 
   /** Usable drawing area: full canvas minus the header. */
   private layoutBox() {
-    const top = 72;
-    const availH = this.canvas.height - top;
+    // The canvas is now the centered stage between the rails, so a uniform fit
+    // (no anisotropic stretch) keeps the constellation circular and composed.
+    const pad = 28;
     const cx = this.canvas.width / 2;
-    const cy = top + availH * 0.5;
-    const maxR = Math.min(this.canvas.width * 0.42, availH * 0.46);
-    return { cx, cy, maxR };
+    const cy = this.canvas.height / 2;
+    const halfW = this.canvas.width / 2 - pad;
+    const halfH = this.canvas.height / 2 - pad;
+    return { cx, cy, maxR: Math.min(halfW, halfH), halfW, halfH };
   }
 
   /**
-   * Hub-and-cluster layout. Infrastructure is laid out as a compact radial tree
-   * (gateway at center, switches/APs on inner rings); each device's clients are
-   * then packed into a phyllotaxis disc around it. This keeps the picture dense
-   * and central instead of flinging clients onto one big sparse outer ring.
+   * Tiered top-down layout: the gateway on top, switches/APs in a row beneath
+   * it, then clients in a few generously-spaced rows below. Order is stable
+   * (clients grouped by uplink), so live traffic never reshuffles seats.
    */
-  private computeRadialTargets(devices: Device[], box: { cx: number; cy: number; maxR: number }) {
-    const ids = new Set(devices.map(d => d.id));
-    const typeOf = (id: string) => this.nodes.get(id)?.device.type;
-    const gateway = devices.find(d => d.type === 'gateway');
-    const rootId = gateway?.id ?? devices.find(d => d.type !== 'client')?.id ?? devices[0]?.id;
-    if (!rootId) return;
+  private computeRadialTargets(
+    devices: Device[],
+    _box: { cx: number; cy: number; maxR: number; halfW: number; halfH: number }
+  ) {
+    const W = this.canvas.width;
+    const H = this.canvas.height;
+    const padX = 56;
+    const left = padX;
+    const usableW = Math.max(1, W - padX * 2);
+    const cx = W / 2;
 
-    // Child map; orphans (unresolved uplink) hang off the gateway.
-    const children = new Map<string, string[]>();
-    const add = (p: string, c: string) => {
-      const a = children.get(p);
-      if (a) a.push(c);
-      else children.set(p, [c]);
-    };
-    for (const d of devices) {
-      if (d.id === rootId) continue;
-      const pid = d.parentDeviceId && ids.has(d.parentDeviceId) ? d.parentDeviceId : rootId;
-      add(pid, d.id);
-    }
-    const infraKids = (id: string) =>
-      (children.get(id) || [])
-        .filter(c => typeOf(c) !== 'client')
-        .sort((a, b) => (this.nodes.get(a)?.device.name || '').localeCompare(this.nodes.get(b)?.device.name || ''));
-    const clientKids = (id: string) => (children.get(id) || []).filter(c => typeOf(c) === 'client');
+    const gateways = devices.filter(d => d.type === 'gateway');
+    const infra = devices
+      .filter(d => d.type !== 'client' && d.type !== 'gateway')
+      .sort((a, b) => a.name.localeCompare(b.name));
+    // Clients grouped by their uplink device, then by name — a stable order.
+    const clients = devices
+      .filter(d => d.type === 'client')
+      .sort(
+        (a, b) =>
+          (a.parentDeviceId || '').localeCompare(b.parentDeviceId || '') ||
+          a.name.localeCompare(b.name)
+      );
 
-    // Angular weight: branches fan out around the gateway, and hubs with many
-    // clients claim a wider wedge so their cluster has room to spread.
-    const wMemo = new Map<string, number>();
-    const weight = (id: string): number => {
-      if (wMemo.has(id)) return wMemo.get(id)!;
-      let w = 1 + Math.sqrt(clientKids(id).length) * 0.7;
-      for (const c of infraKids(id)) w += weight(c);
-      wMemo.set(id, w);
-      return w;
-    };
+    // Vertical bands.
+    const topY = 64;
+    const gatewayY = topY;
+    const infraY = topY + 110;
+    const clientTop = topY + 220;
+    const clientBottom = H - 70;
 
-    let maxDepth = 0;
-    const depthOf = (id: string, d: number) => {
-      maxDepth = Math.max(maxDepth, d);
-      for (const c of infraKids(id)) depthOf(c, d + 1);
-    };
-    depthOf(rootId, 0);
-    // Step each hierarchy level well out from the last, so deeper hubs (APs)
-    // sit in open space with room for their clusters (the scale step refits it).
-    const ringStep = maxDepth > 0 ? (box.maxR * 0.85) / maxDepth : box.maxR * 0.55;
-
-    const placeInfra = (id: string, depth: number, a0: number, a1: number) => {
-      const node = this.nodes.get(id);
-      if (node) {
-        const angle = (a0 + a1) / 2;
-        const r = depth * ringStep;
-        node.targetX = box.cx + r * Math.cos(angle);
-        node.targetY = box.cy + r * Math.sin(angle);
-      }
-      const kids = infraKids(id);
-      if (kids.length === 0) return;
-      const total = kids.reduce((s, c) => s + weight(c), 0);
-      const span = a1 - a0;
-      let cur = a0;
-      for (const c of kids) {
-        const frac = weight(c) / total;
-        placeInfra(c, depth + 1, cur, cur + span * frac);
-        cur += span * frac;
-      }
-    };
-    placeInfra(rootId, 0, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI);
-
-    // Pack each device's clients around it. Each client keeps a STABLE angle
-    // (sorted by id, so they never swap seats); activity drives a smooth
-    // outward pull, so a device gliding idle→busy eases outward continuously
-    // instead of jumping between bands.
-    const PACK = 11; // huddle spacing — more room between clients
-    const PULL = 92; // outward distance for a fully-active client
-    for (const pid of children.keys()) {
-      if (typeOf(pid) === 'client') continue;
-      const parent = this.nodes.get(pid);
-      if (!parent || parent.targetX === undefined || parent.targetY === undefined) continue;
-      const kids = clientKids(pid).slice().sort();
-      if (kids.length === 0) continue;
-
-      let ox = parent.targetX - box.cx;
-      let oy = parent.targetY - box.cy;
-      const ol = Math.hypot(ox, oy) || 1;
-      ox /= ol;
-      oy /= ol;
-      const hubOff = pid === rootId ? 0 : parent.radius + 10;
-      const bx = parent.targetX + ox * hubOff;
-      const by = parent.targetY + oy * hubOff;
-      const phase = this.nodePhase(pid);
-
-      kids.forEach((cid, i) => {
-        const cn = this.nodes.get(cid);
-        if (!cn) return;
-        const activity = this.nodeActivity(cn.device);
-        const rr = 7 + PACK * Math.sqrt(i + 0.5) + activity * PULL;
-        const ang = i * 2.399963 + phase;
-        cn.targetX = bx + Math.cos(ang) * rr;
-        cn.targetY = by + Math.sin(ang) * rr;
+    const rowAt = (items: Device[], y: number) => {
+      items.forEach((d, i) => {
+        const node = this.nodes.get(d.id);
+        if (!node) return;
+        const x = items.length === 1 ? cx : left + (usableW * (i + 0.5)) / items.length;
+        node.targetX = x;
+        node.targetY = y;
       });
-    }
+    };
 
-    // Scale + center from a STABLE estimate of each hub's reach (a function of
-    // client COUNT, not live rates), so traffic never rescales the whole
-    // picture. This is what stops the periodic global "bounce".
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const d of devices) {
-      if (d.type === 'client') continue;
-      const n = this.nodes.get(d.id);
-      if (!n || n.targetX === undefined || n.targetY === undefined) continue;
-      const cc = clientKids(d.id).length;
-      const reach = cc ? 7 + PACK * Math.sqrt(cc) + PULL * 0.55 + 16 : n.radius + 8;
-      minX = Math.min(minX, n.targetX - reach); maxX = Math.max(maxX, n.targetX + reach);
-      minY = Math.min(minY, n.targetY - reach); maxY = Math.max(maxY, n.targetY + reach);
-    }
-    if (Number.isFinite(minX)) {
-      const ccx = (minX + maxX) / 2;
-      const ccy = (minY + maxY) / 2;
-      const halfExtent = Math.max((maxX - minX) / 2, (maxY - minY) / 2, 1);
-      const scale = Math.max(0.8, Math.min(1.7, box.maxR / halfExtent));
-      for (const n of this.nodes.values()) {
-        if (n.targetX === undefined || n.targetY === undefined) continue;
-        n.targetX = box.cx + (n.targetX - ccx) * scale;
-        n.targetY = box.cy + (n.targetY - ccy) * scale;
-      }
-    }
+    rowAt(gateways.length ? gateways : infra.slice(0, 1), gatewayY);
+    rowAt(infra, infraY);
 
-    // Decorative radar rings centered on the canvas.
-    this.layoutCx = box.cx;
-    this.layoutCy = box.cy;
-    this.ringRadii = [0.3, 0.55, 0.8, 1].map(f => f * box.maxR);
+    // Clients in a grid: generous spacing, as many rows as needed.
+    const minSpacing = 50;
+    const cols = Math.max(1, Math.min(clients.length, Math.floor(usableW / minSpacing)));
+    const rows = Math.max(1, Math.ceil(clients.length / cols));
+    const colStep = usableW / cols;
+    const rowSpan = clientBottom - clientTop;
+    const rowStep = rows > 1 ? rowSpan / (rows - 1) : 0;
+    clients.forEach((d, i) => {
+      const node = this.nodes.get(d.id);
+      if (!node) return;
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      node.targetX = left + colStep * (col + 0.5);
+      node.targetY = rows > 1 ? clientTop + rowStep * row : (clientTop + clientBottom) / 2;
+    });
+
+    this.layoutCx = cx;
+    this.layoutCy = (gatewayY + clientBottom) / 2;
+    this.ringRadii = [];
   }
 
   render(
@@ -431,53 +338,38 @@ export class NetworkVisualization {
     const cy = this.layoutCy || h / 2;
     const maxR = this.ringRadii.length ? this.ringRadii[this.ringRadii.length - 1] : Math.min(w, h) / 2;
 
-    // 3-stop radial: lit core → base → vignette at the corners.
-    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR * 1.7);
-    grad.addColorStop(0, '#131a2e');
-    grad.addColorStop(0.55, '#0a0c14');
-    grad.addColorStop(1, '#06070d');
-    ctx.fillStyle = grad;
+    // Deep base + vignette.
+    ctx.fillStyle = '#070910';
     ctx.fillRect(0, 0, w, h);
 
-    // Ambient starfield dust with a slow parallax drift.
-    const drift = this.animationFrame * 0.02;
+    // Off-center "nebula" — a large soft glow giving the void a center of
+    // gravity (anchored near the mass center, nudged up-left).
+    const nx = cx - maxR * 0.18;
+    const ny = cy - maxR * 0.12;
+    const neb = ctx.createRadialGradient(nx, ny, 0, nx, ny, maxR * 1.5);
+    neb.addColorStop(0, 'rgba(34, 48, 86, 0.5)');
+    neb.addColorStop(0.5, 'rgba(18, 26, 48, 0.28)');
+    neb.addColorStop(1, 'rgba(6, 7, 13, 0)');
+    ctx.fillStyle = neb;
+    ctx.fillRect(0, 0, w, h);
+
+    // Layered parallax starfield with a gentle twinkle and corner falloff.
     ctx.save();
     for (const star of this.stars) {
+      const drift = this.animationFrame * (0.004 + star.d * 0.02);
       const sx = ((star.x * w + drift) % w + w) % w;
       const sy = (star.y * h) % h;
-      ctx.fillStyle = `rgba(180, 200, 235, ${star.a})`;
+      const tw = 0.7 + 0.3 * Math.sin(this.animationFrame * 0.02 + star.p);
+      // Fade slightly toward the vignette corners.
+      const dist = Math.hypot(sx - cx, sy - cy) / (Math.hypot(w, h) / 2);
+      const a = star.a * tw * (1 - dist * 0.4);
+      ctx.fillStyle = `rgba(180, 200, 235, ${Math.max(0, a)})`;
       ctx.beginPath();
       ctx.arc(sx, sy, star.r, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();
 
-    // Concentric radar rings + cardinal tick marks (instrument bezel).
-    ctx.save();
-    for (let i = 0; i < this.ringRadii.length; i++) {
-      const r = this.ringRadii[i];
-      ctx.beginPath();
-      ctx.arc(cx, cy, r, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(120, 150, 200, ${i === this.ringRadii.length - 1 ? 0.08 : 0.05})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    // Trailing radar wedge — a sector that fades behind the leading edge.
-    const sweep = (this.animationFrame * 0.0025) % (Math.PI * 2);
-    const wedge = 0.42;
-    ctx.globalCompositeOperation = 'lighter';
-    const steps = 10;
-    for (let i = 0; i < steps; i++) {
-      const a = sweep - (i / steps) * wedge;
-      const alpha = 0.05 * (1 - i / steps);
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(cx + Math.cos(a) * maxR, cy + Math.sin(a) * maxR);
-      ctx.strokeStyle = withAlpha(PALETTE.ice, alpha);
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-    ctx.restore();
   }
 
   private renderLink(link: Link, _weather: WeatherSignals) {
@@ -577,7 +469,7 @@ export class NetworkVisualization {
     // Activity prominence: what's moving data dominates; idle switches recede.
     // The gateway stays the anchor.
     const prominence =
-      device.type === 'gateway' ? 1 : isClient ? 0.26 + active * 0.74 : 0.34 + active * 0.66;
+      device.type === 'gateway' ? 1 : isClient ? 0.34 + active * 0.66 : 0.34 + active * 0.66;
     // Focus pass: dim anything outside the hovered/selected node's path.
     const focusDim = this.focusSet && !this.focusSet.has(device.id) ? 0.22 : 1;
 
@@ -590,7 +482,7 @@ export class NetworkVisualization {
     // clients and offline nodes so the outer ring reads as a starfield.
     const showBloom = online && (!isClient || active > 0.04 || heat > 0.12 || hovered);
     if (showBloom) {
-      const heatColor = heat > 0.5 ? PALETTE.bad : heat > 0.15 ? PALETTE.amber : color;
+      const heatColor = heat > 0.5 ? PALETTE.bad : heat > 0.15 ? PALETTE.heat : color;
       const breathe = 1 + Math.sin(this.animationFrame * 0.04 + node.x * 0.05) * 0.06;
       const haloR = r * (2.3 + heat * 1.4) * breathe;
       const strength = Math.min(0.6, Math.max(0.18, heat * 0.55, active * 0.45) + (hovered ? 0.25 : 0));
@@ -630,13 +522,10 @@ export class NetworkVisualization {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Icon only where there's room (infra + larger active clients).
-    const icon = this.deviceIcons.get(device.type);
-    if (r >= 12 && this.iconsLoaded && icon && icon.complete) {
-      const iconSize = r * 1.5;
-      ctx.globalAlpha = baseAlpha * (online ? 0.92 : 0.5);
-      ctx.drawImage(icon, node.x - iconSize / 2, node.y - iconSize / 2, iconSize, iconSize);
-      ctx.globalAlpha = baseAlpha;
+    // Monoline glyph engraved into the orb, tinted to its hue (infra + bigger
+    // clients only — tiny idle dots stay clean).
+    if (r >= 11) {
+      this.drawGlyph(device.type, node.x, node.y, r, color, baseAlpha * (online ? 1 : 0.55));
     }
 
     // WiFi signal pip.
@@ -674,6 +563,62 @@ export class NetworkVisualization {
       ctx.fillText(label, node.x, ly);
     }
 
+    ctx.restore();
+  }
+
+  /** A clean monoline device glyph, drawn centered and tinted to the node hue. */
+  private drawGlyph(type: DeviceType, x: number, y: number, r: number, color: string, alpha: number) {
+    const ctx = this.ctx;
+    const TAU = Math.PI * 2;
+    const s = r * 0.62;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha *= alpha;
+    ctx.strokeStyle = lighten(color, 0.62);
+    ctx.fillStyle = lighten(color, 0.62);
+    ctx.lineWidth = Math.max(1, r * 0.09);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    if (type === 'gateway') {
+      // Router: rounded body + two antennas + status dots.
+      const w = s * 1.5, h = s * 0.8;
+      this.roundRect(-w / 2, -h / 2 + s * 0.25, w, h, h * 0.32);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.24, -h / 2 + s * 0.25); ctx.lineTo(-w * 0.34, -s);
+      ctx.moveTo(w * 0.24, -h / 2 + s * 0.25); ctx.lineTo(w * 0.34, -s);
+      ctx.stroke();
+      for (const dx of [-0.22, 0.22]) {
+        ctx.beginPath(); ctx.arc(w * dx, s * 0.25, r * 0.06, 0, TAU); ctx.fill();
+      }
+    } else if (type === 'switch') {
+      // Switch: rounded body with a row of ports.
+      const w = s * 1.7, h = s * 1;
+      this.roundRect(-w / 2, -h / 2, w, h, r * 0.13);
+      ctx.stroke();
+      const n = 4;
+      for (let i = 0; i < n; i++) {
+        const px = -w / 2 + (w * (i + 0.5)) / n;
+        ctx.strokeRect(px - r * 0.07, h * 0.06, r * 0.14, h * 0.3);
+      }
+    } else if (type === 'ap') {
+      // Access point: broadcast arcs + a dot.
+      for (let i = 1; i <= 2; i++) {
+        ctx.beginPath();
+        ctx.arc(0, s * 0.55, s * 0.42 * i, Math.PI * 1.25, Math.PI * 1.75);
+        ctx.stroke();
+      }
+      ctx.beginPath(); ctx.arc(0, s * 0.55, r * 0.09, 0, TAU); ctx.fill();
+    } else {
+      // Client: a small monitor outline.
+      const w = s * 1.3, h = s * 0.95;
+      this.roundRect(-w / 2, -h / 2, w, h, r * 0.12);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.2, h / 2 + r * 0.16); ctx.lineTo(w * 0.2, h / 2 + r * 0.16);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -849,8 +794,8 @@ export class NetworkVisualization {
         // Idle switches recede; ones actually carrying traffic grow.
         return 11 + a * 11;
       case 'client':
-        // Idle clients are dim ~3px dots; the busiest grow to ~20px.
-        return 3 + a * 17;
+        // Idle clients are small ~5px dots; the busiest grow to ~21px.
+        return 5 + a * 16;
       default:
         return 12 + a * 8;
     }

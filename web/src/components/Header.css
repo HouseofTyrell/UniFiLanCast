@@ -1,16 +1,12 @@
 .header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 68px;
+  flex-shrink: 0;
+  height: 64px;
   display: flex;
   align-items: center;
   gap: 26px;
-  padding: 0 22px;
+  padding: 0 20px;
   z-index: 100;
-  /* Floating HUD: a scrim so the canvas bleeds up behind it, not a solid bar */
-  background: linear-gradient(180deg, rgba(6, 7, 13, 0.82) 0%, rgba(6, 7, 13, 0.5) 60%, rgba(6, 7, 13, 0) 100%);
+  background: var(--bg-void);
   border-bottom: 1px solid var(--border-hairline);
 }
 

@@ -1,11 +1,8 @@
 .segments {
-  position: absolute;
-  top: 150px;
-  right: 16px;
-  width: 240px;
+  width: 100%;
+  flex-shrink: 0;
   border-radius: var(--radius);
   padding: 12px 14px;
-  z-index: 90;
 }
 
 .segments-head {

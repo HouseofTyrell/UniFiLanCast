@@ -29,6 +29,10 @@ export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMod
       visualization.resize();
     };
 
+    // Track the stage container's size, not the window.
+    const ro = new ResizeObserver(() => visualization.resize());
+    if (canvas.parentElement) ro.observe(canvas.parentElement);
+
     const handleMouseMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -51,6 +55,7 @@ export function NetworkCanvas({ snapshot, filter, selectedId, onSelect, colorMod
       window.removeEventListener('resize', handleResize);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('click', handleClick);
+      ro.disconnect();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }

@@ -1,11 +1,8 @@
 .events {
-  position: absolute;
-  left: 16px;
-  top: 224px;
-  width: 280px;
+  width: 100%;
+  flex-shrink: 0;
   border-radius: var(--radius);
   padding: 12px 14px;
-  z-index: 90;
 }
 
 .events-head {

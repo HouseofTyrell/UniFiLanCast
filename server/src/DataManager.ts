@@ -107,6 +107,39 @@ export class DataManager extends EventEmitter {
     return this.store ? this.store.getRecentEvents(limit) : [];
   }
 
+  /**
+   * Total WAN data transferred over the last `minutes`, by integrating the
+   * gateway's down/up rate (bits/sec) across the persisted history. Returns
+   * cumulative bytes plus a downsampled rate series for a sparkline.
+   */
+  getWanUsage(minutes: number): {
+    minutes: number;
+    downBytes: number;
+    upBytes: number;
+    series: Array<{ t: number; down: number; up: number }>;
+  } {
+    const samples = this.getHistory(minutes);
+    const series = samples.map(s => {
+      const gw = s.devices.find(d => d.type === 'gateway');
+      return { t: s.timestamp, down: gw?.rxBytes ?? 0, up: gw?.txBytes ?? 0 };
+    });
+
+    let downBytes = 0;
+    let upBytes = 0;
+    for (let i = 1; i < series.length; i++) {
+      const dt = (series[i].t - series[i - 1].t) / 1000; // seconds
+      if (dt <= 0 || dt > 180) continue; // skip gaps (restarts etc.)
+      // trapezoidal integration of bits/sec → bytes (÷8)
+      downBytes += ((series[i - 1].down + series[i].down) / 2) * dt / 8;
+      upBytes += ((series[i - 1].up + series[i].up) / 2) * dt / 8;
+    }
+
+    // Downsample the series to keep the response light.
+    const step = Math.max(1, Math.ceil(series.length / 80));
+    const ds = series.filter((_, i) => i % step === 0);
+    return { minutes, downBytes, upBytes, series: ds };
+  }
+
   getAdapterStatus() {
     return this.adapters.map(a => a.getStatus());
   }

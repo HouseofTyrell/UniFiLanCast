@@ -1,11 +1,8 @@
 .talkers {
-  position: absolute;
-  left: 16px;
-  bottom: 88px;
-  width: 280px;
+  width: 100%;
+  flex-shrink: 0;
   border-radius: var(--radius);
   padding: 14px 16px;
-  z-index: 90;
 }
 
 .talkers-header {

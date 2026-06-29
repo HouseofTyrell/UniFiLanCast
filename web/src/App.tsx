@@ -47,42 +47,49 @@ function App() {
     <div className="app">
       <Header snapshot={displaySnapshot} isConnected={isConnected} />
 
-      <NetworkCanvas
-        snapshot={displaySnapshot}
-        filter={filter}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
-        colorMode={colorMode}
-      />
+      <div className="layout">
+        <aside className="rail rail-left">
+          {selectedDevice ? (
+            <DeviceDetail device={selectedDevice} onClose={() => setSelectedId(null)} />
+          ) : (
+            <WanChart data={wanHistory} />
+          )}
+          <Events events={events} />
+          <TopTalkers snapshot={displaySnapshot} onSelect={setSelectedId} />
+        </aside>
 
-      {/* Left column */}
-      {!selectedDevice && <WanChart data={wanHistory} />}
-      <Events events={events} />
-      <TopTalkers snapshot={displaySnapshot} onSelect={setSelectedId} />
-      <DeviceDetail device={selectedDevice} onClose={() => setSelectedId(null)} />
+        <main className="stage">
+          <NetworkCanvas
+            snapshot={displaySnapshot}
+            filter={filter}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            colorMode={colorMode}
+          />
+          <TimePlayback
+            history={history}
+            onFetchHistory={fetchHistory}
+            onSnapshotChange={handleSnapshotChange}
+          />
+        </main>
 
-      {/* Right column */}
-      <Segments snapshot={displaySnapshot} />
-      <Legend
-        snapshot={displaySnapshot}
-        colorMode={colorMode}
-        onColorModeChange={setColorMode}
-      />
-
-      <Controls
-        filter={filter}
-        onFilterChange={setFilter}
-        adapters={adapters}
-        isConnected={isConnected}
-        error={error}
-        onConfigClick={() => setShowConfig(true)}
-      />
-
-      <TimePlayback
-        history={history}
-        onFetchHistory={fetchHistory}
-        onSnapshotChange={handleSnapshotChange}
-      />
+        <aside className="rail rail-right">
+          <Controls
+            filter={filter}
+            onFilterChange={setFilter}
+            adapters={adapters}
+            isConnected={isConnected}
+            error={error}
+            onConfigClick={() => setShowConfig(true)}
+          />
+          <Segments snapshot={displaySnapshot} />
+          <Legend
+            snapshot={displaySnapshot}
+            colorMode={colorMode}
+            onColorModeChange={setColorMode}
+          />
+        </aside>
+      </div>
 
       {showConfig && <ConfigForm onClose={() => setShowConfig(false)} />}
     </div>

@@ -43,6 +43,21 @@ export async function registerApiRoutes(
   });
 
   /**
+   * GET /api/usage - Total WAN data transferred over a recent window
+   */
+  fastify.get<{
+    Querystring: { minutes?: string };
+  }>('/api/usage', async (request, reply) => {
+    try {
+      const minutes = Math.max(1, Math.min(1440, parseInt(request.query.minutes || '60', 10)));
+      return dataManager.getWanUsage(minutes);
+    } catch (error) {
+      logger.error({ error }, 'Failed to get usage');
+      reply.code(500).send({ error: 'Failed to get usage' });
+    }
+  });
+
+  /**
    * GET /api/status - Get adapter status
    */
   fastify.get('/api/status', async (request, reply) => {
