@@ -18,7 +18,8 @@ import { ColorMode } from './utils/vlan';
 import './App.css';
 
 function App() {
-  const { snapshot, history, adapters, isConnected, error, fetchHistory } = useNetworkData();
+  const { snapshot, history, adapters, connState, stale, isConnected, error, fetchHistory } =
+    useNetworkData();
 
   const [filter, setFilter] = useState<Filter>({
     wiredOnly: false,
@@ -69,7 +70,8 @@ function App() {
       )}
       <Header
         snapshot={displaySnapshot}
-        isConnected={isConnected}
+        connState={connState}
+        stale={stale}
         site={adapters.find(a => a.site)?.site}
       />
 

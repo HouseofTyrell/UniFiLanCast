@@ -55,11 +55,22 @@
   overflow: hidden;
 }
 
+/* Below the breakpoint, stack into one scrollable column instead of hiding the
+   rails — the canvas on top, then the panels flow beneath it so controls,
+   events, segments, and device details stay reachable. */
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+    grid-auto-rows: min-content;
+    overflow-y: auto;
+  }
+  .stage {
+    order: -1;
+    height: 52vh;
+    min-height: 320px;
   }
   .rail {
-    display: none;
+    overflow: visible;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
   }
 }

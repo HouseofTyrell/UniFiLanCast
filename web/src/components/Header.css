@@ -147,6 +147,10 @@
   color: var(--accent-warn);
 }
 
+.header-conn.stale {
+  color: var(--accent-warn, #f5a623);
+}
+
 .header-conn-dot {
   width: 7px;
   height: 7px;

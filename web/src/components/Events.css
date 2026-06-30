@@ -99,6 +99,3 @@
   flex-shrink: 0;
 }
 
-@media (max-width: 560px) {
-  .events { display: none; }
-}

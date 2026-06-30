@@ -1,12 +1,21 @@
 import { NetworkSnapshot } from '../types';
 import { computeStats } from '../utils/stats';
 import { formatBitrate } from '../utils/format';
+import { ConnState } from '../hooks/useNetworkData';
 import './Header.css';
 
 interface HeaderProps {
   snapshot: NetworkSnapshot | null;
-  isConnected: boolean;
+  connState: ConnState;
+  stale: boolean;
   site?: string;
+}
+
+function connBadge(connState: ConnState, stale: boolean): { cls: string; label: string } {
+  if (connState === 'connecting') return { cls: 'down', label: 'Connecting…' };
+  if (connState === 'reconnecting') return { cls: 'down', label: 'Reconnecting…' };
+  if (stale) return { cls: 'stale', label: 'Stale' };
+  return { cls: 'live', label: 'Live' };
 }
 
 function Rate({ bps, label, direction }: { bps: number; label: string; direction: 'down' | 'up' }) {
@@ -34,8 +43,9 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: str
   );
 }
 
-export function Header({ snapshot, isConnected, site }: HeaderProps) {
+export function Header({ snapshot, connState, stale, site }: HeaderProps) {
   const stats = computeStats(snapshot);
+  const badge = connBadge(connState, stale);
 
   return (
     <header className="header">
@@ -59,9 +69,9 @@ export function Header({ snapshot, isConnected, site }: HeaderProps) {
         {stats.offlineCount > 0 && <Stat value={stats.offlineCount} label="Offline" tone="bad" />}
       </div>
 
-      <div className={`header-conn ${isConnected ? 'live' : 'down'}`}>
+      <div className={`header-conn ${badge.cls}`}>
         <span className="header-conn-dot" />
-        {isConnected ? 'Live' : 'Reconnecting'}
+        {badge.label}
       </div>
     </header>
   );
