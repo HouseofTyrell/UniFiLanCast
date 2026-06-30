@@ -11,6 +11,13 @@ import {
 import { logger } from '../utils/logger.js';
 import { resolveClientTraffic } from './clientTraffic.js';
 import { resolveSingleSite } from './site.js';
+import {
+  RawSite,
+  RawSiteSchema,
+  RawDeviceSchema,
+  RawClientSchema,
+  parseItems,
+} from './schemas.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 
 /** Max simultaneous per-device controller requests during a capture. */
@@ -155,7 +162,11 @@ export class IntegrationApiAdapter implements NetworkAdapter {
       const targetSites = [resolved.site];
 
       for (const site of targetSites) {
-        const rawDevices = await this.listAll(`${API_PREFIX}/sites/${site.id}/devices`);
+        const rawDevices = parseItems(
+          RawDeviceSchema,
+          await this.listAll(`${API_PREFIX}/sites/${site.id}/devices`),
+          'devices'
+        );
 
         // Fetch each device's detail + statistics with BOUNDED concurrency
         // (instead of two sequential round-trips per device across the whole
@@ -192,7 +203,11 @@ export class IntegrationApiAdapter implements NetworkAdapter {
         try {
           const siteRef = site.internalReference || 'default';
           const legacyRates = await this.fetchLegacyClientRates(siteRef);
-          const rawClients = await this.listAll(`${API_PREFIX}/sites/${site.id}/clients`);
+          const rawClients = parseItems(
+            RawClientSchema,
+            await this.listAll(`${API_PREFIX}/sites/${site.id}/clients`),
+            'clients'
+          );
           for (const raw of rawClients) {
             const client = this.normalizeClient(raw, site.id);
             const legacy = client.mac ? legacyRates.get(client.mac.toLowerCase()) : undefined;
@@ -267,8 +282,8 @@ export class IntegrationApiAdapter implements NetworkAdapter {
 
   // --- HTTP helpers ---------------------------------------------------------
 
-  private async listSites(): Promise<Array<{ id: string; internalReference?: string; name?: string }>> {
-    return this.listAll(`${API_PREFIX}/sites`);
+  private async listSites(): Promise<RawSite[]> {
+    return parseItems(RawSiteSchema, await this.listAll(`${API_PREFIX}/sites`), 'sites');
   }
 
   private async getJson(url: string, params?: Record<string, unknown>): Promise<any> {
