@@ -16,6 +16,15 @@ export interface DataManagerOptions {
   store?: Store;
   /** Thresholds for centralized latency/packet-loss health events. */
   healthThresholds?: Partial<HealthThresholds>;
+  /** Optional active WAN probe; its latency/loss is attributed to the gateway. */
+  probe?: LatencyProbe;
+}
+
+/** Minimal interface for an active latency/loss source (e.g. PingProbe). */
+export interface LatencyProbe {
+  start(): void;
+  stop(): void;
+  getLatest(): { latencyMs?: number; lossPct?: number } | undefined;
 }
 
 /**
@@ -28,6 +37,7 @@ export class DataManager extends EventEmitter {
   private adapters: NetworkAdapter[] = [];
   private weatherEngine: WeatherEngine;
   private healthMonitor: HealthMonitor;
+  private probe?: LatencyProbe;
   private store?: Store;
   private retentionMinutes: number;
   private captureIntervalMs: number;
@@ -45,6 +55,7 @@ export class DataManager extends EventEmitter {
     this.adapters = adapters;
     this.weatherEngine = new WeatherEngine();
     this.healthMonitor = new HealthMonitor(options.healthThresholds);
+    this.probe = options.probe;
     this.store = options.store;
     this.retentionMinutes = options.retentionMinutes ?? 60;
     this.captureIntervalMs = options.captureIntervalMs ?? 5000;
@@ -64,6 +75,7 @@ export class DataManager extends EventEmitter {
     }
 
     this.isRunning = true;
+    this.probe?.start();
 
     // Single capture loop drives live updates, persistence, and alerts.
     await this.captureSnapshot();
@@ -86,6 +98,7 @@ export class DataManager extends EventEmitter {
   async stop(): Promise<void> {
     logger.info('Stopping data manager...');
     this.isRunning = false;
+    this.probe?.stop();
     if (this.captureTimer) clearInterval(this.captureTimer);
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
 
@@ -174,6 +187,17 @@ export class DataManager extends EventEmitter {
   private async doCapture(): Promise<NetworkSnapshot> {
     const started = Date.now();
     const snapshot = await this.buildSnapshot();
+
+    // Attribute the active WAN probe's latency/loss to the gateway (the
+    // Integration API doesn't expose these), so health detection has data.
+    const ping = this.probe?.getLatest();
+    if (ping) {
+      const gw = snapshot.devices.find(d => d.type === 'gateway');
+      if (gw) {
+        if (ping.latencyMs !== undefined) gw.latencyMs = ping.latencyMs;
+        if (ping.lossPct !== undefined) gw.packetLoss = ping.lossPct;
+      }
+    }
 
     // Centralized health detection (latency/packet-loss, with hysteresis) over
     // the normalized snapshot — adapter-agnostic. Added before persistence so

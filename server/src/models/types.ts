@@ -189,5 +189,16 @@ export interface Config {
     latencyLowMs?: number;
     lossHighPct?: number; // fraction 0..1
     lossLowPct?: number;
+    /**
+     * Active WAN health probe: periodically ICMP-pings a target and attributes
+     * the measured latency / packet loss to the gateway (the Integration API
+     * does not expose these). Enabled by default; ping 1.1.1.1 every 15s.
+     */
+    ping?: {
+      enabled?: boolean;
+      target?: string;
+      intervalMs?: number;
+      count?: number;
+    };
   };
 }

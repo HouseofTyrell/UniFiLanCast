@@ -5,6 +5,7 @@ import { join, dirname } from 'path';
 import { readFileSync, existsSync } from 'fs';
 import { timingSafeEqual } from 'crypto';
 import { DataManager } from './DataManager.js';
+import { PingProbe } from './PingProbe.js';
 import { Store } from './Store.js';
 import { AlertManager } from './AlertManager.js';
 import { MockAdapter } from './adapters/MockAdapter.js';
@@ -226,12 +227,21 @@ async function main() {
     logger.error({ error }, 'Failed to open persistence store — running in-memory only');
   }
 
+  // Active WAN health probe (latency/loss for the gateway). Enabled by default;
+  // disable with config.health.ping.enabled = false.
+  const pingCfg = config.health?.ping;
+  const probe =
+    pingCfg?.enabled === false
+      ? undefined
+      : new PingProbe(pingCfg?.target, pingCfg?.intervalMs, pingCfg?.count);
+
   // Initialize adapters and data manager
   const adapters = initializeAdapters(config);
   const dataManager = new DataManager(adapters, {
     retentionMinutes: config.server.historyRetentionMinutes,
     store,
     healthThresholds: config.health,
+    probe,
   });
 
   // Wire alerting: dispatch qualifying events from each capture to a webhook.

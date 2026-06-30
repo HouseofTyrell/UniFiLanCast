@@ -54,6 +54,11 @@
     "latencyHighMs": 150,
     "latencyLowMs": 80,
     "lossHighPct": 0.05,
-    "lossLowPct": 0.02
+    "lossLowPct": 0.02,
+    "ping": {
+      "enabled": true,
+      "target": "1.1.1.1",
+      "intervalMs": 15000
+    }
   }
 }
