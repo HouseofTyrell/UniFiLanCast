@@ -92,7 +92,8 @@ export function ConfigForm({ onClose }: ConfigFormProps) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to save configuration');
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || `Failed to save configuration (${response.status})`);
       }
 
       setMessage({ text: 'Configuration saved successfully! Restart the server to apply changes.', type: 'success' });

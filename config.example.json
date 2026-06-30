@@ -29,7 +29,8 @@
   "server": {
     "port": 3001,
     "historyRetentionMinutes": 1440,
-    "logLevel": "info"
+    "logLevel": "info",
+    "allowConfigWrites": false
   },
   "auth": {
     "enabled": false,

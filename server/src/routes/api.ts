@@ -4,7 +4,7 @@ import { existsSync } from 'fs';
 import { DataManager } from '../DataManager.js';
 import { logger } from '../utils/logger.js';
 import { resolveConfigPath } from '../utils/paths.js';
-import { redactConfig, validateConfig, preserveMaskedSecrets } from '../utils/configValidation.js';
+import { redactConfig, validateConfig, preserveMaskedSecrets, canWriteConfig } from '../utils/configValidation.js';
 import { Config } from '../models/types.js';
 
 /**
@@ -12,8 +12,13 @@ import { Config } from '../models/types.js';
  */
 export async function registerApiRoutes(
   fastify: FastifyInstance,
-  dataManager: DataManager
+  dataManager: DataManager,
+  config: Config
 ) {
+  const writesAllowed = canWriteConfig({
+    authEnabled: !!config.auth?.enabled,
+    allowConfigWrites: !!config.server.allowConfigWrites,
+  });
   /**
    * GET /api/snapshot - Get current network state
    */
@@ -219,6 +224,22 @@ export async function registerApiRoutes(
     Body: Config;
   }>('/api/config', { bodyLimit: 256 * 1024 }, async (request, reply) => {
     try {
+      // Writes are disabled by default; permitted only with auth or an explicit
+      // opt-in (prevents an unauthenticated client from rewriting config).
+      if (!writesAllowed) {
+        reply.code(403).send({
+          error:
+            'Config writes are disabled. Enable auth.enabled or set server.allowConfigWrites = true.',
+        });
+        return;
+      }
+      // CSRF mitigation: require a JSON content-type. A cross-origin <form> POST
+      // can't set this without a CORS preflight, which our origin allowlist blocks.
+      if (!(request.headers['content-type'] || '').includes('application/json')) {
+        reply.code(415).send({ error: 'Content-Type must be application/json' });
+        return;
+      }
+
       const configPath = resolveConfigPath();
       const config = request.body as any;
 

@@ -170,7 +170,7 @@ Tests use **Vitest** and cover the highest-risk logic (rate→bytes integration,
 ## Security notes
 
 - The server **binds `127.0.0.1` by default** and **refuses to start LAN-exposed (`server.host`) with `auth.enabled: false`** — a fail-closed default. To expose it, set `server.host: "0.0.0.0"` and enable auth (ideally behind a reverse proxy with HTTPS).
-- `GET /api/config` **redacts secrets**; `POST /api/config` validates input and writes atomically. Still, gate the app behind auth before exposing it.
+- `GET /api/config` **redacts secrets**; `POST /api/config` is **disabled by default** (returns 403) — config writes are only permitted with `auth.enabled` or an explicit `server.allowConfigWrites: true`, and require a JSON content-type. Validated + written atomically.
 - `verifySsl` **defaults to `true`** — set it to `false` explicitly (or pin a CA) for a controller's self-signed cert.
 - Never commit `config.json` or `.env` (both gitignored). Use a read-only API key, sourced from an env var.
 

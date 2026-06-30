@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { redactConfig, validateConfig, preserveMaskedSecrets } from './configValidation.js';
+import {
+  redactConfig,
+  validateConfig,
+  preserveMaskedSecrets,
+  canWriteConfig,
+} from './configValidation.js';
+
+describe('canWriteConfig', () => {
+  it('forbids writes by default (no auth, no opt-in)', () => {
+    expect(canWriteConfig({ authEnabled: false, allowConfigWrites: false })).toBe(false);
+  });
+  it('allows writes when authenticated', () => {
+    expect(canWriteConfig({ authEnabled: true, allowConfigWrites: false })).toBe(true);
+  });
+  it('allows writes when explicitly opted in', () => {
+    expect(canWriteConfig({ authEnabled: false, allowConfigWrites: true })).toBe(true);
+  });
+});
 
 describe('redactConfig', () => {
   it('masks every secret-bearing field', () => {

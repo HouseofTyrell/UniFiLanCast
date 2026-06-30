@@ -20,6 +20,15 @@ export function redactConfig(config: any): any {
 
 export const ALLOWED_CONFIG_KEYS = new Set(['adapters', 'server', 'auth', 'alerts', 'health']);
 
+/**
+ * Whether config writes are permitted. Secure default: writes are off unless
+ * the operator authenticates (auth.enabled) or explicitly opts in
+ * (server.allowConfigWrites), so an unauthenticated client can't rewrite config.
+ */
+export function canWriteConfig(opts: { authEnabled: boolean; allowConfigWrites: boolean }): boolean {
+  return opts.authEnabled || opts.allowConfigWrites;
+}
+
 /** Minimal runtime validation for a posted config (types are compile-time only). */
 export function validateConfig(body: unknown): string | null {
   if (!body || typeof body !== 'object') return 'Body must be a JSON object';

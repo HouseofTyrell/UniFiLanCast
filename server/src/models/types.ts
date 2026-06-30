@@ -161,6 +161,11 @@ export interface Config {
      * auth.enabled = true.
      */
     host?: string;
+    /**
+     * Allow the UI / API to overwrite config.json. Disabled by default; config
+     * writes are otherwise only permitted when auth.enabled is true.
+     */
+    allowConfigWrites?: boolean;
   };
   auth?: {
     enabled: boolean;

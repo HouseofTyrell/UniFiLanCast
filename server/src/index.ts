@@ -265,7 +265,7 @@ async function main() {
   }
 
   // Register API routes
-  await registerApiRoutes(fastify, dataManager);
+  await registerApiRoutes(fastify, dataManager, config);
 
   // Graceful shutdown
   const shutdown = async () => {
