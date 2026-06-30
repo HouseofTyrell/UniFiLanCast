@@ -10,6 +10,7 @@ import {
 } from '../models/types.js';
 import { logger } from '../utils/logger.js';
 import { resolveClientTraffic } from './clientTraffic.js';
+import { resolveSingleSite } from './site.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 
 /** Max simultaneous per-device controller requests during a capture. */
@@ -58,6 +59,8 @@ export class IntegrationApiAdapter implements NetworkAdapter {
   name = 'integration-api';
   private client: AxiosInstance;
   private siteFilter?: string;
+  private siteWarned = false;
+  private activeSiteName?: string;
   private pollingInterval: number;
 
   private lastUpdate = 0;
@@ -137,9 +140,19 @@ export class IntegrationApiAdapter implements NetworkAdapter {
 
     try {
       const sites = await this.listSites();
-      const targetSites = this.siteFilter
-        ? sites.filter(s => s.id === this.siteFilter || s.internalReference === this.siteFilter)
-        : sites;
+      // Single-site (1.0): process exactly one site so device IDs can't collide
+      // and gateway/WAN selection is deterministic.
+      const resolved = resolveSingleSite(sites, this.siteFilter);
+      if (resolved.warning && !this.siteWarned) {
+        logger.warn(resolved.warning);
+        this.siteWarned = true;
+      }
+      if (resolved.error || !resolved.site) {
+        logger.error({ error: resolved.error }, 'Cannot resolve a site');
+        return { devices: this.deviceCache, links: this.linkCache, events: [] };
+      }
+      this.activeSiteName = resolved.site.name;
+      const targetSites = [resolved.site];
 
       for (const site of targetSites) {
         const rawDevices = await this.listAll(`${API_PREFIX}/sites/${site.id}/devices`);
@@ -244,6 +257,7 @@ export class IntegrationApiAdapter implements NetworkAdapter {
       lastUpdate: this.lastUpdate,
       error: this.lastError,
       deviceCount: this.deviceCache.length,
+      site: this.activeSiteName,
     };
   }
 

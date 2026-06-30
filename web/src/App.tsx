@@ -58,7 +58,11 @@ function App() {
           ⚠ SIMULATED DATA — the mock adapter is active; this is not your real network.
         </div>
       )}
-      <Header snapshot={displaySnapshot} isConnected={isConnected} />
+      <Header
+        snapshot={displaySnapshot}
+        isConnected={isConnected}
+        site={adapters.find(a => a.site)?.site}
+      />
 
       <div className="layout">
         <aside className="rail rail-left">

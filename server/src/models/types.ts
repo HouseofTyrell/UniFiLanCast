@@ -101,6 +101,8 @@ export interface AdapterStatus {
   lastUpdate: number;
   error?: string;
   deviceCount: number;
+  /** Resolved active site name (single-site mode). */
+  site?: string;
 }
 
 export interface HistorySample {

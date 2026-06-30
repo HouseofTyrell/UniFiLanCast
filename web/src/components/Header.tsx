@@ -6,6 +6,7 @@ import './Header.css';
 interface HeaderProps {
   snapshot: NetworkSnapshot | null;
   isConnected: boolean;
+  site?: string;
 }
 
 function Rate({ bps, label, direction }: { bps: number; label: string; direction: 'down' | 'up' }) {
@@ -33,7 +34,7 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: str
   );
 }
 
-export function Header({ snapshot, isConnected }: HeaderProps) {
+export function Header({ snapshot, isConnected, site }: HeaderProps) {
   const stats = computeStats(snapshot);
 
   return (
@@ -42,7 +43,9 @@ export function Header({ snapshot, isConnected }: HeaderProps) {
         <img src="/icons/logo-icon.svg" alt="" className="header-logo-icon" />
         <div className="header-title-block">
           <h1 className="header-title">UniFiLanCast</h1>
-          <span className="header-subtitle">Network Weather Map</span>
+          <span className="header-subtitle">
+            Network Weather Map{site ? ` · ${site}` : ''}
+          </span>
         </div>
       </div>
 
