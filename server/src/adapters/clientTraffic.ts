@@ -24,8 +24,8 @@ export interface LegacyClientRate {
 }
 
 export interface ClientTraffic {
-  rxBytes: number; // download rate, bits/sec
-  txBytes: number; // upload rate, bits/sec
+  rxBps: number; // download rate, bits/sec
+  txBps: number; // upload rate, bits/sec
   totalRxBytes: number; // cumulative download bytes
   totalTxBytes: number; // cumulative upload bytes
 }
@@ -37,15 +37,15 @@ export function resolveClientTraffic(
 ): ClientTraffic {
   if (legacy) {
     return {
-      rxBytes: legacy.downRate,
-      txBytes: legacy.upRate,
+      rxBps: legacy.downRate,
+      txBps: legacy.upRate,
       totalRxBytes: legacy.totalDown,
       totalTxBytes: legacy.totalUp,
     };
   }
   return {
-    rxBytes: 0,
-    txBytes: 0,
+    rxBps: 0,
+    txBps: 0,
     totalRxBytes: rawCumulativeTx ?? 0, // client tx = download
     totalTxBytes: rawCumulativeRx ?? 0,
   };

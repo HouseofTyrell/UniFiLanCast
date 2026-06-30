@@ -95,7 +95,7 @@ export class MockAdapter implements NetworkAdapter {
       const toDevice = this.devices.find(d => d.id === link.toId);
 
       if (fromDevice && toDevice && toDevice.online) {
-        const totalTraffic = toDevice.txBytes + toDevice.rxBytes;
+        const totalTraffic = toDevice.txBps + toDevice.rxBps;
         // Normalize to 0-1 (1Gbps = full utilization)
         link.utilizationScore = Math.min(
           1,
@@ -144,8 +144,8 @@ export class MockAdapter implements NetworkAdapter {
       ip: '192.168.1.1',
       wiredOrWifi: 'wired',
       siteId: 'default',
-      txBytes: 0,
-      rxBytes: 0,
+      txBps: 0,
+      rxBps: 0,
       lastSeen: now,
       online: true,
       trafficPattern: 'steady',
@@ -167,8 +167,8 @@ export class MockAdapter implements NetworkAdapter {
         uplinkPort: `${i + 1}`,
         wiredOrWifi: 'wired',
         siteId: 'default',
-        txBytes: 0,
-        rxBytes: 0,
+        txBps: 0,
+        rxBps: 0,
         lastSeen: now,
         online: true,
         trafficPattern: 'steady',
@@ -205,8 +205,8 @@ export class MockAdapter implements NetworkAdapter {
         parentDeviceId: parentSwitch.id,
         wiredOrWifi: 'wired',
         siteId: 'default',
-        txBytes: 0,
-        rxBytes: 0,
+        txBps: 0,
+        rxBps: 0,
         lastSeen: now,
         online: true,
         trafficPattern: 'bursty',
@@ -252,8 +252,8 @@ export class MockAdapter implements NetworkAdapter {
         siteId: 'default',
         ssid: isWifi ? `HomeNet-${Math.floor(Math.random() * 2) + 1}` : undefined,
         rssi: isWifi ? -50 - Math.random() * 40 : undefined,
-        txBytes: 0,
-        rxBytes: 0,
+        txBps: 0,
+        rxBps: 0,
         lastSeen: now,
         online: Math.random() < 0.9, // 90% online
         trafficPattern: Math.random() < 0.3 ? 'bursty' : Math.random() < 0.6 ? 'steady' : 'idle',
@@ -298,8 +298,8 @@ export class MockAdapter implements NetworkAdapter {
 
     // Split between tx and rx
     const split = 0.4 + Math.random() * 0.2;
-    device.txBytes = Math.floor(traffic * split);
-    device.rxBytes = Math.floor(traffic * (1 - split));
+    device.txBps = Math.floor(traffic * split);
+    device.rxBps = Math.floor(traffic * (1 - split));
 
     // Simulate packet loss occasionally
     if (Math.random() < 0.01) {

@@ -275,8 +275,12 @@ export class LocalNetworkAdapter implements NetworkAdapter {
       uplinkPort: raw.uplink?.uplink_remote_port,
       wiredOrWifi: 'wired',
       siteId,
-      txBytes: raw['tx_bytes-r'] || raw.tx_bytes || 0,
-      rxBytes: raw['rx_bytes-r'] || raw.rx_bytes || 0,
+      // legacy *-r fields are BYTES/sec → ×8 to bits/sec (the model's unit).
+      // Never fall back to the cumulative tx_bytes/rx_bytes counters as a rate.
+      txBps: (raw['tx_bytes-r'] || 0) * 8,
+      rxBps: (raw['rx_bytes-r'] || 0) * 8,
+      totalTxBytes: raw.tx_bytes || 0,
+      totalRxBytes: raw.rx_bytes || 0,
       lastSeen: raw.last_seen ? raw.last_seen * 1000 : Date.now(),
       online: raw.state === 1,
       latencyMs: raw.uplink_latency || raw.latency,
@@ -296,8 +300,12 @@ export class LocalNetworkAdapter implements NetworkAdapter {
       ssid: raw.essid,
       rssi: raw.rssi,
       vlanId: raw.vlan,
-      txBytes: raw['tx_bytes-r'] || raw.tx_bytes || 0,
-      rxBytes: raw['rx_bytes-r'] || raw.rx_bytes || 0,
+      // Client direction: the controller's tx is the DOWNLOAD (to the client).
+      // *-r are bytes/sec → ×8 to bits/sec; cumulative counters stay as totals.
+      rxBps: (raw['tx_bytes-r'] || 0) * 8,
+      txBps: (raw['rx_bytes-r'] || 0) * 8,
+      totalRxBytes: raw.tx_bytes || 0,
+      totalTxBytes: raw.rx_bytes || 0,
       lastSeen: raw.last_seen ? raw.last_seen * 1000 : Date.now(),
       online: true,
       latencyMs: raw.latency,
@@ -319,7 +327,7 @@ export class LocalNetworkAdapter implements NetworkAdapter {
   }
 
   private calculateUtilization(device: Device): number {
-    const totalBytes = device.txBytes + device.rxBytes;
+    const totalBytes = device.txBps + device.rxBps;
     return Math.min(1, totalBytes / (1024 * 1024 * 1024));
   }
 }

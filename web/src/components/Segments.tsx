@@ -24,7 +24,7 @@ export function Segments({ snapshot }: Props) {
       byVlan.set(d.vlanId, s);
     }
     s.clients++;
-    s.rate += (d.txBytes || 0) + (d.rxBytes || 0);
+    s.rate += (d.txBps || 0) + (d.rxBps || 0);
   }
   const segs = [...byVlan.values()].sort((a, b) => b.rate - a.rate || b.clients - a.clients);
   if (segs.length === 0) return null;

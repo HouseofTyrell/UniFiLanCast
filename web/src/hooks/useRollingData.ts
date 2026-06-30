@@ -42,7 +42,7 @@ export function useRollingData(snapshot: NetworkSnapshot | null) {
 
     const gw = snapshot.devices.find(d => d.type === 'gateway');
     setWanHistory(prev => {
-      const next = [...prev, { t: snapshot.timestamp, down: gw?.rxBytes || 0, up: gw?.txBytes || 0 }];
+      const next = [...prev, { t: snapshot.timestamp, down: gw?.rxBps || 0, up: gw?.txBps || 0 }];
       return next.length > MAX_WAN ? next.slice(next.length - MAX_WAN) : next;
     });
 

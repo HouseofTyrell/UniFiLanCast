@@ -38,8 +38,8 @@ describe('integrateSeries', () => {
 describe('integrateDeviceUsages', () => {
   it('accumulates per-device usage across samples', () => {
     const totals = integrateDeviceUsages([
-      { timestamp: 0, devices: [{ id: 'a', type: 'client', rxBytes: 8000, txBytes: 800 }] },
-      { timestamp: 10_000, devices: [{ id: 'a', type: 'client', rxBytes: 8000, txBytes: 800 }] },
+      { timestamp: 0, devices: [{ id: 'a', type: 'client', rxBps: 8000, txBps: 800 }] },
+      { timestamp: 10_000, devices: [{ id: 'a', type: 'client', rxBps: 8000, txBps: 800 }] },
     ] as any);
     expect(totals.a.down).toBeCloseTo(10_000, 6);
     expect(totals.a.up).toBeCloseTo(1000, 6);
@@ -47,12 +47,12 @@ describe('integrateDeviceUsages', () => {
 
   it('only counts a device present in both consecutive samples', () => {
     const totals = integrateDeviceUsages([
-      { timestamp: 0, devices: [{ id: 'a', rxBytes: 8000, txBytes: 0 }] },
+      { timestamp: 0, devices: [{ id: 'a', rxBps: 8000, txBps: 0 }] },
       {
         timestamp: 10_000,
         devices: [
-          { id: 'a', rxBytes: 8000, txBytes: 0 },
-          { id: 'b', rxBytes: 8000, txBytes: 0 }, // first appearance — no prior point
+          { id: 'a', rxBps: 8000, txBps: 0 },
+          { id: 'b', rxBps: 8000, txBps: 0 }, // first appearance — no prior point
         ],
       },
     ] as any);

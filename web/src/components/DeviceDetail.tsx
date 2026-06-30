@@ -88,8 +88,8 @@ export function DeviceDetail({ device, onClose, minutes, onMinutesChange }: Prop
   if (!device) return null;
   const color = TYPE_COLOR[device.type];
   const isClient = device.type === 'client';
-  const down = device.rxBytes || 0;
-  const up = device.txBytes || 0;
+  const down = device.rxBps || 0;
+  const up = device.txBps || 0;
   const totalDown = device.totalRxBytes;
   const totalUp = device.totalTxBytes;
   const bars = device.rssi !== undefined ? signalBars(device.rssi) : -1;

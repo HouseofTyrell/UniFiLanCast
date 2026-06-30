@@ -17,8 +17,8 @@ export interface Device {
   vlanId?: number;
   ssid?: string;
   rssi?: number;
-  txBytes: number;
-  rxBytes: number;
+  txBps: number;
+  rxBps: number;
   lastSeen: number;
   online: boolean;
   latencyMs?: number;

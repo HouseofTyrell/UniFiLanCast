@@ -40,8 +40,8 @@ export function computeStats(snapshot: NetworkSnapshot | null): NetworkStats {
 
   const gateway = devices.find(d => d.type === 'gateway');
   // Gateway uplink: rx = inbound from WAN (download), tx = outbound (upload).
-  const wanDown = gateway?.rxBytes ?? 0;
-  const wanUp = gateway?.txBytes ?? 0;
+  const wanDown = gateway?.rxBps ?? 0;
+  const wanUp = gateway?.txBps ?? 0;
 
   let totalThroughput = 0;
   let infraCount = 0;
@@ -60,7 +60,7 @@ export function computeStats(snapshot: NetworkSnapshot | null): NetworkStats {
 
     // The gateway's throughput is the WAN (already shown in the header), so
     // exclude it from LAN top-talkers and the total to avoid double-counting.
-    const rate = (d.txBytes ?? 0) + (d.rxBytes ?? 0);
+    const rate = (d.txBps ?? 0) + (d.rxBps ?? 0);
     if (d.type !== 'gateway') {
       totalThroughput += rate;
       if (rate > 0) talkers.push({ device: d, rate });

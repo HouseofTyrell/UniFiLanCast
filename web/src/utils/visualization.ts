@@ -111,7 +111,7 @@ export class NetworkVisualization {
 
   /** Combined throughput level (download + upload). */
   private trafficLevel(device: Device): number {
-    return this.rateLevel((device.txBytes || 0) + (device.rxBytes || 0));
+    return this.rateLevel((device.txBps || 0) + (device.rxBps || 0));
   }
 
   /** Per-device usage over the window; drives node size/brightness when present. */
@@ -489,8 +489,8 @@ export class NetworkVisualization {
     };
 
     const child = toNode.device;
-    const downLvl = this.rateLevel(child.rxBytes || 0);
-    const upLvl = this.rateLevel(child.txBytes || 0);
+    const downLvl = this.rateLevel(child.rxBps || 0);
+    const upLvl = this.rateLevel(child.txBps || 0);
     const sep = 2.6;
 
     ctx.save();
@@ -711,9 +711,9 @@ export class NetworkVisualization {
 
     const title = device.name;
     const sub: string[] = [];
-    const rate = (device.txBytes || 0) + (device.rxBytes || 0);
+    const rate = (device.txBps || 0) + (device.rxBps || 0);
     if (rate > 0) {
-      sub.push(`↓ ${formatBitrateStr(device.rxBytes || 0)}   ↑ ${formatBitrateStr(device.txBytes || 0)}`);
+      sub.push(`↓ ${formatBitrateStr(device.rxBps || 0)}   ↑ ${formatBitrateStr(device.txBps || 0)}`);
     }
     sub.push(device.ip || device.type);
     if (device.wiredOrWifi === 'wifi' && device.ssid) sub.push(device.ssid);

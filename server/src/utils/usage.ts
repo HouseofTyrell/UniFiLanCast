@@ -30,7 +30,7 @@ export function integrateSeries(series: RatePoint[]): { downBytes: number; upByt
 
 /**
  * Per-device usage (bytes) over a set of history samples, in a single pass that
- * reuses the previous sample's device map. rxBytes/txBytes hold bits/sec rates.
+ * reuses the previous sample's device map. rxBps/txBps hold bits/sec rates.
  */
 export function integrateDeviceUsages(
   samples: HistorySample[]
@@ -47,8 +47,8 @@ export function integrateDeviceUsages(
         const p = prev.get(id);
         if (!p) continue;
         const t = totals[id] || (totals[id] = { down: 0, up: 0 });
-        t.down += (((p.rxBytes ?? 0) + (d.rxBytes ?? 0)) / 2) * dt / 8;
-        t.up += (((p.txBytes ?? 0) + (d.txBytes ?? 0)) / 2) * dt / 8;
+        t.down += (((p.rxBps ?? 0) + (d.rxBps ?? 0)) / 2) * dt / 8;
+        t.up += (((p.txBps ?? 0) + (d.txBps ?? 0)) / 2) * dt / 8;
       }
     }
     prev = cur;

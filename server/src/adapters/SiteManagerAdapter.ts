@@ -196,8 +196,8 @@ export class SiteManagerAdapter implements NetworkAdapter {
       vlanId: raw.vlan,
       ssid: raw.essid,
       rssi: raw.rssi,
-      txBytes: raw.tx_bytes || 0,
-      rxBytes: raw.rx_bytes || 0,
+      txBps: raw.tx_bytes || 0,
+      rxBps: raw.rx_bytes || 0,
       lastSeen: raw.last_seen ? raw.last_seen * 1000 : Date.now(),
       online: raw.state === 1 || raw.state === 'connected',
       latencyMs: raw.latency,
@@ -222,7 +222,7 @@ export class SiteManagerAdapter implements NetworkAdapter {
   }
 
   private calculateUtilization(device: Device): number {
-    const totalBytes = device.txBytes + device.rxBytes;
+    const totalBytes = device.txBps + device.rxBps;
     // Normalize to 0-1 (1Gbps = full)
     return Math.min(1, totalBytes / (1024 * 1024 * 1024));
   }

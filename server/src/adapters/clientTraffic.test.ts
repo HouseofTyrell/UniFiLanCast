@@ -10,8 +10,8 @@ describe('resolveClientTraffic', () => {
       totalUp: 200_000_000,
     });
     expect(t).toEqual({
-      rxBytes: 8_000_000, // download rate
-      txBytes: 1_000_000, // upload rate
+      rxBps: 8_000_000, // download rate
+      txBps: 1_000_000, // upload rate
       totalRxBytes: 5_000_000_000,
       totalTxBytes: 200_000_000,
     });
@@ -20,16 +20,16 @@ describe('resolveClientTraffic', () => {
   it('never treats cumulative byte counters as a rate when there is no legacy match', () => {
     // raw cumulative tx=3 GB (download), rx=400 MB (upload)
     const t = resolveClientTraffic(3_000_000_000, 400_000_000);
-    expect(t.rxBytes).toBe(0); // rate unknown, NOT the cumulative counter
-    expect(t.txBytes).toBe(0);
+    expect(t.rxBps).toBe(0); // rate unknown, NOT the cumulative counter
+    expect(t.txBps).toBe(0);
     expect(t.totalRxBytes).toBe(3_000_000_000); // download total (client tx = download)
     expect(t.totalTxBytes).toBe(400_000_000); // upload total
   });
 
   it('defaults missing cumulative counters to zero', () => {
     expect(resolveClientTraffic(undefined, undefined)).toEqual({
-      rxBytes: 0,
-      txBytes: 0,
+      rxBps: 0,
+      txBps: 0,
       totalRxBytes: 0,
       totalTxBytes: 0,
     });

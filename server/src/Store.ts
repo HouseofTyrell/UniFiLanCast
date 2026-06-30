@@ -4,6 +4,21 @@ import { dirname } from 'path';
 import { Device, NetworkEvent, HistorySample } from './models/types.js';
 import { logger } from './utils/logger.js';
 
+/**
+ * Migrate a persisted snapshot in place: older rows stored the live-rate fields
+ * as rxBytes/txBytes; the model now calls them rxBps/txBps. Map them on read so
+ * historical usage keeps integrating correctly after the rename.
+ */
+export function migrateSample(sample: any): HistorySample {
+  if (Array.isArray(sample?.devices)) {
+    for (const d of sample.devices) {
+      if (d && d.rxBps === undefined && d.rxBytes !== undefined) d.rxBps = d.rxBytes;
+      if (d && d.txBps === undefined && d.txBytes !== undefined) d.txBps = d.txBytes;
+    }
+  }
+  return sample as HistorySample;
+}
+
 export interface DeviceRecord {
   id: string;
   mac?: string;
@@ -95,7 +110,7 @@ export class Store {
   getHistory(minutes: number): HistorySample[] {
     const cutoff = Date.now() - minutes * 60 * 1000;
     const rows = this.selectSnapshots.all(cutoff) as Array<{ data: string }>;
-    return rows.map(r => JSON.parse(r.data) as HistorySample);
+    return rows.map(r => migrateSample(JSON.parse(r.data)));
   }
 
   /**

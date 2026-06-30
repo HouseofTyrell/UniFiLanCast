@@ -198,8 +198,8 @@ export class IntegrationApiAdapter implements NetworkAdapter {
             const legacy = client.mac ? legacyRates.get(client.mac.toLowerCase()) : undefined;
             if (legacy) {
               const traffic = resolveClientTraffic(undefined, undefined, legacy);
-              client.rxBytes = traffic.rxBytes;
-              client.txBytes = traffic.txBytes;
+              client.rxBps = traffic.rxBps;
+              client.txBps = traffic.txBps;
               client.totalRxBytes = traffic.totalRxBytes;
               client.totalTxBytes = traffic.totalTxBytes;
               if (legacy.rssiDbm !== undefined) client.rssi = legacy.rssiDbm;
@@ -363,8 +363,8 @@ export class IntegrationApiAdapter implements NetworkAdapter {
       uplinkPort: this.asString(raw.uplink?.portIdx ?? raw.uplinkPort),
       wiredOrWifi: 'wired',
       siteId,
-      txBytes: 0,
-      rxBytes: 0,
+      txBps: 0,
+      rxBps: 0,
       lastSeen: this.toMs(raw.lastSeen ?? raw.lastHeartbeatAt) ?? Date.now(),
       online: this.isOnline(raw.state ?? raw.status),
     };
@@ -391,8 +391,8 @@ export class IntegrationApiAdapter implements NetworkAdapter {
       ssid: raw.ssid || raw.essid,
       rssi: this.pickNumber(raw, ['signalStrength', 'rssi', 'signal']),
       vlanId: this.pickNumber(raw, ['vlanId', 'vlan']),
-      txBytes: traffic.txBytes,
-      rxBytes: traffic.rxBytes,
+      txBps: traffic.txBps,
+      rxBps: traffic.rxBps,
       totalRxBytes: traffic.totalRxBytes,
       totalTxBytes: traffic.totalTxBytes,
       lastSeen: this.toMs(raw.lastSeen ?? raw.connectedAt) ?? Date.now(),
@@ -415,8 +415,8 @@ export class IntegrationApiAdapter implements NetworkAdapter {
   private applyDeviceStats(device: Device, stats: any): void {
     if (!stats) return;
     const uplink = stats.uplink ?? stats;
-    device.txBytes = this.extractRate(uplink, ['txRateBps', 'txRate', 'tx_bytes-r', 'txBytes']) ?? device.txBytes;
-    device.rxBytes = this.extractRate(uplink, ['rxRateBps', 'rxRate', 'rx_bytes-r', 'rxBytes']) ?? device.rxBytes;
+    device.txBps = this.extractRate(uplink, ['txRateBps', 'txRate', 'tx_bytes-r', 'txBytes']) ?? device.txBps;
+    device.rxBps = this.extractRate(uplink, ['rxRateBps', 'rxRate', 'rx_bytes-r', 'rxBytes']) ?? device.rxBps;
     const latency = this.pickNumber(stats, ['latencyMs', 'latencyAvgMs', 'uplinkLatencyMs', 'latency']);
     if (latency !== undefined) device.latencyMs = latency;
     const loss = this.pickNumber(stats, ['packetLossPct', 'lossPct', 'packetLoss']);
@@ -510,7 +510,7 @@ export class IntegrationApiAdapter implements NetworkAdapter {
 
   /**
    * Traffic-rate fields drive the storm/wind animation. The weather engine reads
-   * tx/rxBytes as a throughput proxy, so a bytes-per-second rate maps directly.
+   * tx/rxBps as a throughput proxy, so a bytes-per-second rate maps directly.
    */
   private extractRate(obj: any, keys: string[]): number | undefined {
     return this.pickNumber(obj, keys);
@@ -529,7 +529,7 @@ export class IntegrationApiAdapter implements NetworkAdapter {
   }
 
   private calculateUtilization(device: Device): number {
-    const totalBytes = device.txBytes + device.rxBytes;
+    const totalBytes = device.txBps + device.rxBps;
     // Normalize to 0..1 against ~1 Gbps of throughput.
     return Math.min(1, totalBytes / (1024 * 1024 * 128));
   }

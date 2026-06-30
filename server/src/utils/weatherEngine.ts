@@ -30,7 +30,7 @@ export class WeatherEngine {
     // the busiest link is always a visible storm, the rest scale down from it.
     const deviceById = new Map(devices.map(d => [d.id, d]));
     const throughputOf = (d: Device | undefined) =>
-      d ? Math.max(0, d.txBytes) + Math.max(0, d.rxBytes) : 0;
+      d ? Math.max(0, d.txBps) + Math.max(0, d.rxBps) : 0;
 
     let peak = WeatherEngine.MIN_REFERENCE;
     for (const device of devices) peak = Math.max(peak, throughputOf(device));

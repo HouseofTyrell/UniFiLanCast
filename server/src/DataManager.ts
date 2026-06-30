@@ -149,7 +149,7 @@ export class DataManager extends EventEmitter {
       deviceId ? s.devices.find(d => d.id === deviceId) : s.devices.find(d => d.type === 'gateway');
     const series = samples.map(s => {
       const dev = pick(s);
-      return { t: s.timestamp, down: dev?.rxBytes ?? 0, up: dev?.txBytes ?? 0 };
+      return { t: s.timestamp, down: dev?.rxBps ?? 0, up: dev?.txBps ?? 0 };
     });
 
     const { downBytes, upBytes } = integrateSeries(series);
