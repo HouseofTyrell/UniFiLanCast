@@ -8,6 +8,9 @@ import {
 } from '../types';
 import { formatBitrateStr } from './format';
 import { vlanColor, ColorMode } from './vlan';
+import { rateLevel, usageScale, tierMaxUsage, nodeRadius } from './viz/scale';
+import { computeRadialLayout } from './viz/layout';
+import { pickNodeAt } from './viz/hitTest';
 
 // "Observatory" palette — must mirror theme.css. Light is emitted from the
 // data; the chrome stays neutral.
@@ -101,44 +104,25 @@ export class NetworkVisualization {
     });
   }
 
-  /** Normalize a rate (bits/sec) to 0..1 on a log scale (~50Kbps..~50Mbps). */
-  private rateLevel(bps: number): number {
-    if (bps <= 0) return 0;
-    const lo = Math.log10(50_000);
-    const hi = Math.log10(50_000_000);
-    return Math.max(0, Math.min(1, (Math.log10(bps) - lo) / (hi - lo)));
-  }
-
-  /** Combined throughput level (download + upload). */
+  /** Combined throughput level (download + upload). See viz/scale. */
   private trafficLevel(device: Device): number {
-    return this.rateLevel((device.txBps || 0) + (device.rxBps || 0));
+    return rateLevel((device.txBps || 0) + (device.rxBps || 0));
   }
 
   /** Per-device usage over the window; drives node size/brightness when present. */
   setUsageMap(map: Record<string, { down: number; up: number }>) {
     this.usageMap = map || {};
-    this.maxClientUsage = 0;
-    this.maxInfraUsage = 0;
-    for (const [id, u] of Object.entries(this.usageMap)) {
-      const total = (u.down || 0) + (u.up || 0);
-      const type = this.nodes.get(id)?.device.type;
-      if (type === 'client') this.maxClientUsage = Math.max(this.maxClientUsage, total);
-      else if (type && type !== 'gateway') this.maxInfraUsage = Math.max(this.maxInfraUsage, total);
-    }
+    const { client, infra } = tierMaxUsage(this.usageMap, id => this.nodes.get(id)?.device.type);
+    this.maxClientUsage = client;
+    this.maxInfraUsage = infra;
   }
 
   /** Normalize a device's windowed usage to 0..1, relative to its tier's max. */
   private usageLevel(device: Device): number {
     const u = this.usageMap[device.id];
     const bytes = u ? (u.down || 0) + (u.up || 0) : 0;
-    if (bytes <= 0) return 0;
     const max = device.type === 'client' ? this.maxClientUsage : this.maxInfraUsage;
-    if (max <= 0) return 0;
-    const hi = Math.log10(max);
-    // Span ~2.5 decades below the busiest device, but always keep a real range
-    // so a small max doesn't collapse every node to idle (lo must stay < hi).
-    const lo = Math.min(hi - 0.5, Math.log10(Math.max(1, max * 0.003)));
-    return Math.max(0, Math.min(1, (Math.log10(bytes) - lo) / (hi - lo)));
+    return usageScale(bytes, max);
   }
 
   /**
@@ -243,99 +227,23 @@ export class NetworkVisualization {
     devices: Device[],
     _box: { cx: number; cy: number; maxR: number; halfW: number; halfH: number }
   ) {
-    const W = this.cssW;
-    const H = this.cssH;
-    const padX = 48;
-    const left = padX;
-    const usableW = Math.max(1, W - padX * 2);
-    const cx = W / 2;
-
-    const gateway = devices.find(d => d.type === 'gateway');
-    const infra = devices
-      .filter(d => d.type !== 'client' && d.type !== 'gateway')
-      .sort((a, b) => a.name.localeCompare(b.name));
-    const infraIds = new Set(infra.map(d => d.id));
-
-    // Group clients by their owning hub (parent if it's infra, else the gateway).
-    const byOwner = new Map<string, Device[]>();
-    for (const d of devices) {
-      if (d.type !== 'client') continue;
-      const owner = d.parentDeviceId && infraIds.has(d.parentDeviceId) ? d.parentDeviceId : 'gw';
-      (byOwner.get(owner) || byOwner.set(owner, []).get(owner)!).push(d);
-    }
-    for (const arr of byOwner.values()) arr.sort((a, b) => a.id.localeCompare(b.id));
-
-    // One column per infra hub (+ a gateway column if any clients hang off it).
-    type Col = { node?: Device; clients: Device[] };
-    const cols: Col[] = infra.map(d => ({ node: d, clients: byOwner.get(d.id) || [] }));
-    const gwClients = byOwner.get('gw') || [];
-    if (gwClients.length) cols.push({ node: undefined, clients: gwClients });
-
-    // Arrange columns biggest-in-the-center so the dominant cluster is centered.
-    const bySize = [...cols].sort((a, b) => b.clients.length - a.clients.length);
-    const ordered: Col[] = new Array(bySize.length);
-    let li = Math.floor((bySize.length - 1) / 2);
-    let ri = li + 1;
-    bySize.forEach((c, i) => {
-      if (i % 2 === 0) ordered[li--] = c;
-      else ordered[ri++] = c;
-    });
-
-    // Band width ∝ client count (softened) so big clusters get room but small
-    // hubs still get a visible slot.
-    const weightOf = (c: Col) => Math.sqrt(c.clients.length) + 0.9;
-    const totalW = ordered.reduce((s, c) => s + weightOf(c), 0) || 1;
-
-    const gatewayY = 58;
-    const infraY = 162;
-    const clientTop = 244;
-    const clientBottom = H - 60;
-    const clientH = clientBottom - clientTop;
-
-    let curX = left;
-    for (const c of ordered) {
-      const bandW = (usableW * weightOf(c)) / totalW;
-      const bandCx = curX + bandW / 2;
-      if (c.node) {
-        const node = this.nodes.get(c.node.id);
-        if (node) {
-          node.targetX = bandCx;
-          node.targetY = infraY;
-        }
-      }
-      // Pack this hub's clients into an organic phyllotaxis (sunflower) cluster
-      // hanging below it — a natural blob, not a rigid grid. Spacing adapts so
-      // the blob fits both its band width and the vertical space.
-      const n = c.clients.length;
-      if (n > 0) {
-        const sqn = Math.sqrt(n);
-        const cspace = Math.min(28, (bandW * 0.46) / sqn, (clientH * 0.46) / sqn);
-        const discR = cspace * sqn;
-        const clusterY = clientTop + discR + 14;
-        const rot = this.nodePhase(c.node ? c.node.id : 'gw');
-        c.clients.forEach((d, i) => {
-          const node = this.nodes.get(d.id);
-          if (!node) return;
-          const rr = cspace * Math.sqrt(i + 0.5);
-          const ang = i * 2.399963 + rot;
-          const ph = this.nodePhase(d.id);
-          node.targetX = bandCx + Math.cos(ang) * rr + Math.cos(ph) * 5;
-          node.targetY = clusterY + Math.sin(ang) * rr + Math.sin(ph * 1.7) * 5;
-        });
-      }
-      curX += bandW;
-    }
-
-    if (gateway) {
-      const node = this.nodes.get(gateway.id);
+    // Pure layout math lives in viz/layout (tested without a canvas); here we
+    // just apply the computed targets to the live nodes.
+    const { targets, layoutCx, layoutCy } = computeRadialLayout(
+      devices,
+      this.cssW,
+      this.cssH,
+      id => this.nodePhase(id)
+    );
+    for (const [id, t] of targets) {
+      const node = this.nodes.get(id);
       if (node) {
-        node.targetX = cx;
-        node.targetY = gatewayY;
+        node.targetX = t.x;
+        node.targetY = t.y;
       }
     }
-
-    this.layoutCx = cx;
-    this.layoutCy = (gatewayY + clientBottom) / 2;
+    this.layoutCx = layoutCx;
+    this.layoutCy = layoutCy;
     this.ringRadii = [];
   }
 
@@ -489,8 +397,8 @@ export class NetworkVisualization {
     };
 
     const child = toNode.device;
-    const downLvl = this.rateLevel(child.rxBps || 0);
-    const upLvl = this.rateLevel(child.txBps || 0);
+    const downLvl = rateLevel(child.rxBps || 0);
+    const upLvl = rateLevel(child.txBps || 0);
     const sep = 2.6;
 
     ctx.save();
@@ -864,21 +772,7 @@ export class NetworkVisualization {
   }
 
   private getNodeRadius(device: Device, activity?: number): number {
-    const a = activity ?? this.trafficLevel(device);
-    switch (device.type) {
-      case 'gateway':
-        // The WAN anchor stays prominent regardless.
-        return 24;
-      case 'switch':
-      case 'ap':
-        // Idle switches recede; ones actually carrying traffic grow.
-        return 11 + a * 11;
-      case 'client':
-        // Idle clients are small ~5px dots; the busiest grow to ~21px.
-        return 5 + a * 16;
-      default:
-        return 12 + a * 8;
-    }
+    return nodeRadius(device.type, activity ?? this.trafficLevel(device));
   }
 
   private getNodeColor(device: Device): string {
@@ -921,13 +815,13 @@ export class NetworkVisualization {
 
   /** Return the device id at a point, or null. Pads the radius for small dots. */
   hitTest(x: number, y: number): string | null {
-    let best: { id: string; d: number } | null = null;
+    return pickNodeAt(this.hitPoints(), x, y);
+  }
+
+  private *hitPoints() {
     for (const node of this.nodes.values()) {
-      const d = Math.hypot(x - node.x, y - node.y);
-      const hit = Math.max(node.radius, 9);
-      if (d <= hit && (!best || d < best.d)) best = { id: node.device.id, d };
+      yield { x: node.x, y: node.y, radius: node.radius, id: node.device.id };
     }
-    return best ? best.id : null;
   }
 
   setSelected(id: string | null) {

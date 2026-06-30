@@ -39,7 +39,11 @@ NetworkVisualization (canvas)           web/src/utils/visualization.ts
 ## Frontend (`web/`)
 
 - **Hooks** — `useNetworkData` (SSE + status/history fetches), `useRollingData` (live WAN buffer + events feed), `useDeviceUsages` (per-device usage map for the selected window).
-- **NetworkVisualization** (`utils/visualization.ts`) — the canvas renderer. Sized to its **stage** container (between the rails) via `ResizeObserver`. Responsibilities: layout (`computeRadialTargets` — the tiered hub-and-cluster layout), eased + drifting node motion, node/link/weather rendering, hit-testing, focus pass, color modes, and **usage-driven sizing** (`setUsageMap` → `usageLevel`).
+- **NetworkVisualization** (`utils/visualization.ts`) — the canvas renderer (eased + drifting node motion, node/link/weather rendering, focus pass, color modes, DPI viewport). The **pure, canvas-independent logic is extracted into `utils/viz/`** so it's unit-tested without a canvas:
+  - `viz/layout.ts` — `computeRadialLayout()`: the tiered hub-and-cluster target positions.
+  - `viz/scale.ts` — `rateLevel` / `usageScale` / `tierMaxUsage` / `nodeRadius`: activity + usage-driven sizing.
+  - `viz/hitTest.ts` — `pickNodeAt()`: nearest-node hit-testing.
+  The class applies these results to live nodes and owns only the rendering/animation state.
 - **App.tsx** — owns shared state: filter, selection, color mode, and the **global usage window** (drives panels *and* node sizing). Lays out the rail/stage/rail grid.
 - **Panels** — Header HUD, WanChart (data-usage window), DeviceDetail, TopTalkers, Segments (VLAN), Events, Legend, Controls, TimePlayback.
 
