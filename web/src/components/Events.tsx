@@ -3,6 +3,7 @@ import './Events.css';
 
 interface Props {
   events: NetworkEvent[];
+  onClear?: () => void;
 }
 
 const ICON: Record<string, string> = {
@@ -10,6 +11,7 @@ const ICON: Record<string, string> = {
   offline: '○',
   device_reconnect: '●',
   latency_spike: '⚡',
+  packet_loss: '▽',
   wan_issue: '▲',
 };
 
@@ -20,12 +22,17 @@ function ago(ts: number): string {
   return `${Math.floor(s / 3600)}h`;
 }
 
-export function Events({ events }: Props) {
+export function Events({ events, onClear }: Props) {
   return (
     <div className="events glass">
       <div className="events-head">
         <span className="events-title">Live events</span>
         <span className="events-count">{events.length}</span>
+        {events.length > 0 && onClear && (
+          <button className="events-clear" onClick={onClear} title="Clear event history">
+            Clear
+          </button>
+        )}
       </div>
       {events.length === 0 ? (
         <div className="events-empty">Watching for changes…</div>

@@ -94,6 +94,19 @@ export async function registerApiRoutes(
   });
 
   /**
+   * DELETE /api/events - Clear the persisted event log.
+   */
+  fastify.delete('/api/events', async (request, reply) => {
+    try {
+      const removed = dataManager.clearEvents();
+      return { success: true, removed };
+    } catch (error) {
+      logger.error({ error }, 'Failed to clear events');
+      reply.code(500).send({ error: 'Failed to clear events' });
+    }
+  });
+
+  /**
    * GET /api/status - Get adapter status
    */
   fastify.get('/api/status', async (request, reply) => {

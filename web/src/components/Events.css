@@ -8,7 +8,7 @@
 .events-head {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 9px;
 }
 
@@ -21,8 +21,29 @@
 }
 
 .events-count {
+  margin-left: auto;
   font-size: 11px;
   color: var(--text-faint);
+}
+
+.events-clear {
+  appearance: none;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.events-clear:hover {
+  color: var(--text-base);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .events-empty {

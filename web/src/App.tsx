@@ -45,7 +45,16 @@ function App() {
     (selectedId && displaySnapshot?.devices.find(d => d.id === selectedId)) || null;
 
   // Rolling history accumulated from the live stream (not playback).
-  const { wanHistory, events } = useRollingData(snapshot);
+  const { wanHistory, events, clearEvents } = useRollingData(snapshot);
+
+  const handleClearEvents = useCallback(async () => {
+    try {
+      await fetch('/api/events', { method: 'DELETE' });
+    } catch {
+      /* clear the local feed regardless */
+    }
+    clearEvents();
+  }, [clearEvents]);
 
   // Make simulated data unmistakable: the mock adapter is only ever active when
   // explicitly enabled, but if it is, say so loudly.
@@ -76,7 +85,7 @@ function App() {
           ) : (
             <WanChart data={wanHistory} minutes={windowMinutes} onMinutesChange={setWindowMinutes} />
           )}
-          <Events events={events} />
+          <Events events={events} onClear={handleClearEvents} />
           <TopTalkers snapshot={displaySnapshot} onSelect={setSelectedId} />
         </aside>
 

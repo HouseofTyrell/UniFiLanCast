@@ -160,6 +160,12 @@ export class Store {
     tx(events);
   }
 
+  /** Delete all persisted events (the "clear feed" action). Returns the count removed. */
+  clearEvents(): number {
+    const info = this.db.prepare('DELETE FROM events').run();
+    return info.changes;
+  }
+
   getRecentEvents(limit = 200): NetworkEvent[] {
     const rows = this.recentEventsStmt.all(limit) as Array<any>;
     return rows.map(r => ({

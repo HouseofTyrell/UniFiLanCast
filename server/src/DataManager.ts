@@ -127,6 +127,11 @@ export class DataManager extends EventEmitter {
     return this.store ? this.store.getRecentEvents(limit) : [];
   }
 
+  /** Clear the persisted event log. Returns the number removed. */
+  clearEvents(): number {
+    return this.store ? this.store.clearEvents() : 0;
+  }
+
   /**
    * Total data transferred over the last `minutes`, by integrating a device's
    * down/up rate (bits/sec) across the persisted history. Defaults to the

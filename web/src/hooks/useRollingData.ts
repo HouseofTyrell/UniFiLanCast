@@ -64,5 +64,15 @@ export function useRollingData(snapshot: NetworkSnapshot | null) {
     }
   }, [snapshot]);
 
-  return { wanHistory, events };
+  // Clear the on-screen feed and reset dedupe, but keep the last-seen timestamp
+  // so already-seen events from the current snapshot don't immediately re-add.
+  const clearEvents = () => {
+    setEvents([]);
+    seen.current = new Set();
+    if (snapshot) {
+      for (const e of snapshot.events) seen.current.add(`${e.ts}:${e.message}`);
+    }
+  };
+
+  return { wanHistory, events, clearEvents };
 }
