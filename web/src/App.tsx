@@ -10,6 +10,7 @@ import { DeviceDetail } from './components/DeviceDetail';
 import { WanChart } from './components/WanChart';
 import { Segments } from './components/Segments';
 import { Events } from './components/Events';
+import { ReactorView } from './components/ReactorView';
 import { useNetworkData } from './hooks/useNetworkData';
 import { useRollingData } from './hooks/useRollingData';
 import { useDeviceUsages } from './hooks/useDeviceUsages';
@@ -32,6 +33,7 @@ function App() {
   const [showConfig, setShowConfig] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>('type');
+  const [reactorOpen, setReactorOpen] = useState(false);
   // Global usage window — drives the panels AND the node sizing.
   const [windowMinutes, setWindowMinutes] = useState(60);
   const deviceUsage = useDeviceUsages(windowMinutes);
@@ -61,6 +63,14 @@ function App() {
   // explicitly enabled, but if it is, say so loudly.
   const simulated = adapters.some(a => a.name === 'mock' && a.connected);
 
+  if (reactorOpen) {
+    return (
+      <div className="app">
+        <ReactorView snapshot={displaySnapshot} onClose={() => setReactorOpen(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       {simulated && (
@@ -73,6 +83,7 @@ function App() {
         connState={connState}
         stale={stale}
         site={adapters.find(a => a.site)?.site}
+        onReactor={() => setReactorOpen(true)}
       />
 
       <div className="layout">

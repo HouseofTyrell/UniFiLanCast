@@ -151,6 +151,32 @@
   color: var(--accent-warn, #f5a623);
 }
 
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.header-reactor {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-dim, #8a94a6);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.header-reactor:hover {
+  color: #ffce7a;
+  border-color: rgba(245, 166, 35, 0.5);
+  background: rgba(245, 166, 35, 0.08);
+}
+
 .header-conn-dot {
   width: 7px;
   height: 7px;

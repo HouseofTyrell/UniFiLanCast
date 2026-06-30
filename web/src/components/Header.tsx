@@ -9,6 +9,7 @@ interface HeaderProps {
   connState: ConnState;
   stale: boolean;
   site?: string;
+  onReactor?: () => void;
 }
 
 function connBadge(connState: ConnState, stale: boolean): { cls: string; label: string } {
@@ -43,7 +44,7 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: str
   );
 }
 
-export function Header({ snapshot, connState, stale, site }: HeaderProps) {
+export function Header({ snapshot, connState, stale, site, onReactor }: HeaderProps) {
   const stats = computeStats(snapshot);
   const badge = connBadge(connState, stale);
 
@@ -69,9 +70,16 @@ export function Header({ snapshot, connState, stale, site }: HeaderProps) {
         {stats.offlineCount > 0 && <Stat value={stats.offlineCount} label="Offline" tone="bad" />}
       </div>
 
-      <div className={`header-conn ${badge.cls}`}>
-        <span className="header-conn-dot" />
-        {badge.label}
+      <div className="header-right">
+        {onReactor && (
+          <button className="header-reactor" onClick={onReactor} title="Open the Reactor view">
+            ◎ Reactor
+          </button>
+        )}
+        <div className={`header-conn ${badge.cls}`}>
+          <span className="header-conn-dot" />
+          {badge.label}
+        </div>
       </div>
     </header>
   );
