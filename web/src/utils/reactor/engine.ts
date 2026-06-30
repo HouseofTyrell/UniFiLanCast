@@ -689,7 +689,15 @@ export class ReactorEngine {
     vg.addColorStop(1, 'rgba(0,0,0,0.72)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, w, h);
-    const base = Math.min(w * 0.62, h - cyTop);
+    // Size the reactor so the OUTER client ring (radius 0.57·base, stretched ×sx
+    // horizontally) plus a margin for node radius + labels always fits inside
+    // the viewport below the HUD — at any rotation — so no node is clipped.
+    const OUTER = 0.57;
+    const padX = 80;
+    const padY = 66;
+    const fitX = (w / 2 - padX) / (OUTER * sx);
+    const fitY = ((h - cyTop) / 2 - padY) / OUTER;
+    const base = Math.max(80, Math.min(w * 0.62, h - cyTop, fitX, fitY));
     const spinRot = t * 0.05 * MO;
     this.infra.forEach((d, i) => {
       const a = spinRot - Math.PI / 2 + (i / Math.max(1, this.infra.length)) * 6.28;
