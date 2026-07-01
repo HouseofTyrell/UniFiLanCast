@@ -21,8 +21,9 @@ Fastify routes  (REST + SSE)            server/src/routes/api.ts
 Frontend hooks   useNetworkData (SSE), useRollingData, useDeviceUsages
    │
    ▼
+ReactorEngine (canvas, default)         web/src/utils/reactor/engine.ts
 NetworkVisualization (canvas)           web/src/utils/visualization.ts
-   + dashboard panels                   web/src/components/
+   + view chrome / dashboard panels     web/src/components/
 ```
 
 ## Backend (`server/`)
@@ -44,13 +45,16 @@ NetworkVisualization (canvas)           web/src/utils/visualization.ts
   - `viz/scale.ts` — `rateLevel` / `usageScale` / `tierMaxUsage` / `nodeRadius`: activity + usage-driven sizing.
   - `viz/hitTest.ts` — `pickNodeAt()`: nearest-node hit-testing.
   The class applies these results to live nodes and owns only the rendering/animation state.
-- **App.tsx** — owns shared state: filter, selection, color mode, and the **global usage window** (drives panels *and* node sizing). Lays out the rail/stage/rail grid.
-- **Panels** — Header HUD, WanChart (data-usage window), DeviceDetail, TopTalkers, Segments (VLAN), Events, Legend, Controls, TimePlayback.
+- **ReactorEngine** (`utils/reactor/engine.ts`) — the default full-screen view. A self-contained canvas class: gateway core, infra on a rotating spine ring, three VLAN buses with clients arced around them; own rAF loop, eased rates, hit-testing, and a telemetry callback that feeds the React chrome (`ReactorView.tsx`). Features: per-VLAN **uplink breakdown** (`uplinksFor`) + on-filter **physical-path overlay** (`drawUplinkPaths`, device → access switch/AP → gateway), a **quiet filter** (dims sub-`ACTIVE_BPS` nodes with a 10s activity hold), >1 GB **data-used labels**, and Gbps/TB-scale readouts.
+- **App.tsx** — opens on the Reactor (`reactorOpen` defaults true; Exit/`Esc` → dashboard). Owns shared state: filter, selection, color mode, and the **global usage window** (drives panels *and* node sizing). Lays out the rail/stage/rail grid for the dashboard.
+- **Panels** — Header HUD (+ down/up `Sparkline`, "Idle" under ~50 Kbps), WanChart (data-usage window), DeviceDetail, TopTalkers, Segments (VLAN), Events, Legend, Controls, TimePlayback.
 
 ## Key semantics & gotchas (read before touching rates)
 
-- **Units.** Everything is normalized to **bits/sec** internally. The Integration API's device `statistics/latest.uplink.txRateBps`/`rxRateBps` are already **bits/sec**; the legacy `stat/sta` client `tx_bytes-r`/`rx_bytes-r` are **bytes/sec** — the adapter multiplies the latter by 8. Display volumes (`/api/usage`) are **bytes** (÷8 from bit-rate integration).
-- **Client down/up.** For a *client*, the controller's `tx_bytes` is the **download** (AP→client), the reverse of the gateway's uplink convention. The adapter swaps client tx/rx so `rxBytes` = download everywhere.
+- **Units.** Everything is normalized to **bits/sec** internally. The Integration API's device `statistics/latest.uplink.txRateBps`/`rxRateBps` are already **bits/sec**; the legacy `stat/sta` client `tx_bytes-r`/`rx_bytes-r` are **bytes/sec** — the adapter multiplies the latter by 8. Display volumes (`/api/usage`) are **bytes** (÷8 from bit-rate integration). Device rates use **only** true rate fields — never a cumulative counter fallback (which would spike to multi-Gbps on a poll missing the rate).
+- **Wired clients.** Wired stations report traffic under **`wired-*`** keys (`wired-tx_bytes`, `wired-tx_bytes-r`, …) while the bare keys come back null — `extractLegacyClientRate` accepts either. Missing this made wired PCs read as zero activity.
+- **Live per-client rate = counter delta.** The adapter derives each client's live rate from the **change in its cumulative byte counters between polls** (`deltaRate`, guarded against resets/short intervals), falling back to the reported `*-r` rate only on the first sample. UniFi's `*-r` field is coarse and under-reports active streams. (Note: UniFi's per-client counters can miss some LAN/inter-VLAN egress — a host's upload to another VLAN may not be attributed to it even when the receiver's download is; this is a controller-side limit, not recoverable from client stats.)
+- **Client down/up.** For a *client*, the controller's `tx_bytes` is the **download** (infra→client), the reverse of the gateway's uplink convention. The adapter swaps client tx/rx so `rxBytes` = download everywhere.
 - **API key.** A *local Network Integration* key (Network app → Control Plane → Integrations) works against `/proxy/network/integration/v1` **and** the legacy `/proxy/network/api/...`. A `unifi.ui.com` cloud key only works against `api.ui.com` and returns 401 locally.
 - **Type definitions are duplicated** between `server/src/models/types.ts` and `web/src/types/index.ts` — keep them in sync (a known tech-debt item).
 

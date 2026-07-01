@@ -7,7 +7,9 @@ Where UniFiLanCast is and where it's going. **Check the "Shipped" list before bu
 - **Real hardware** via the local Network Integration API (`IntegrationApiAdapter`) + legacy `stat/sta` per-client enrichment.
 - **Persistence** — SQLite store (history, device inventory with first-seen, events) surviving restarts; continuous capture loop.
 - **Bandwidth** — live per-device + WAN throughput; **windowed data usage** (5m–8h) for WAN, per device, and **driving node sizing**.
-- **Dashboard** — live HUD header, WAN trend chart, Top Talkers, VLAN Segments, live Events feed, device-detail panel.
+- **Rate accuracy** — per-client live rates derived from **cumulative-counter deltas between polls** (`deltaRate`) instead of UniFi's coarse `*-r`; **wired-client** support (`wired-*` fields); device rates restricted to true rate fields (no counter-as-rate spikes).
+- **Reactor** (default view) — full-screen radial reactor (`utils/reactor/engine.ts` + `ReactorView.tsx`): gateway core, infra spine ring, VLAN buses + arced clients. Per-VLAN **uplink breakdown** + on-filter **physical-path overlay**, **quiet filter** (dims <1 Mbps, 10s hold), >1 GB **data-used labels**, Gbps/TB scale, down/up **sparklines** + "Idle" state, spotlight/hover, VLAN legend/filter, motion/intensity controls.
+- **Dashboard** — live HUD header (+ throughput sparklines), WAN trend chart, Top Talkers, VLAN Segments, live Events feed, device-detail panel.
 - **Visualization** — tiered + organic-clustered constellation, weather effects (flow/heat/fog/lightning), activity-based prominence + focus pass, VLAN coloring, monoline device icons, ambient depth.
 - **Alerting** — webhook dispatcher (Discord/Slack/generic) with severity gating + throttle/dedup.
 - **Auth** — optional HTTP Basic over the whole app.
@@ -43,7 +45,7 @@ A full multi-dimension code review (architecture, correctness, security, perform
 - **Performance/rendering** — `devicePixelRatio` applied, fixing blurry Retina canvas (PERF-1); SSE serialize-once (PERF-6); `getDeviceUsages` map reuse (PERF-7); single long-lived rAF loop (PERF-8).
 
 ### ⏳ Remaining (prioritized)
-- [~] **Automated tests** — Vitest is set up in both workspaces and gates every push via `npm run ci`; 28 tests cover the rate→bytes integration, config validation/redaction/secret-preservation, alert delivery/throttle, formatting, and VLAN coloring. _Remaining: adapter normalization fixtures (legacy unit conversion / client direction), React hook tests (SSE cleanup), layout math, and coverage thresholds._
+- [~] **Automated tests** — Vitest is set up in both workspaces and gates every push via `npm run ci`; ~89 tests (server + web) cover the rate→bytes integration, **client traffic mapping** (wired-`*` fields, cumulative-vs-rate, counter-delta rates), config validation/redaction/secret-preservation, alert delivery/throttle, formatting, VLAN coloring, and viz layout/scale/hit-test. _Remaining: adapter end-to-end normalization fixtures, React hook tests (SSE cleanup), reactor engine unit coverage, and coverage thresholds._
 - [ ] **Usage-integration cadence** — store (30s) vs in-memory (5s) sampling diverge; `dt>180s` gaps silently dropped → under-counted totals. Make cadence explicit/consistent; clamp rather than drop gaps (COR-3).
 - [ ] **`fetchData` drops events captured between polls** when capture cadence < poll cadence — buffer & drain, or validate the config combination (COR-2).
 - [ ] **Client rate/counter unit ambiguity** for clients with no legacy match — always set `rxBytes/txBytes` to rates, keep cumulative in totals (COR-4).

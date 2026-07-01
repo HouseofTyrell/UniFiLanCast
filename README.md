@@ -1,6 +1,9 @@
 # UniFiLanCast — Network Weather Map
 
-A real-time, ambient visualization dashboard for your UniFi network. It renders your network as a living **constellation** — gateway on top, switches and access points below, and each device's clients clustered beneath it — animated as a "weather map" where traffic is wind, device load is heat, outages are fog, and latency spikes are lightning.
+A real-time, ambient visualization dashboard for your UniFi network. It ships two views of the same live data:
+
+- **Reactor** (default) — a full-screen radial "reactor": the gateway is the glowing core, switches/APs sit on a rotating spine ring, and the three VLAN segments are buses with their clients arced around them. Isolate a VLAN to trace the physical path (device → access switch/AP → gateway).
+- **Constellation dashboard** — a living map (gateway on top, switches/APs below, clients clustered beneath) animated as a "weather map" where traffic is wind, device load is heat, outages are fog, and latency spikes are lightning.
 
 ![status](https://img.shields.io/badge/status-active-green) ![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue)
 
@@ -10,6 +13,8 @@ A real-time, ambient visualization dashboard for your UniFi network. It renders 
 
 ## Highlights
 
+- **Reactor view** — full-screen radial reactor (the default view), driven by the live data. Per-VLAN **access breakdown** (which switch/AP each segment's devices attach through) with an on-filter **physical-path overlay**; a **quiet filter** that dims sub-1 Mbps nodes (with a 10s hold so bursty streams don't strobe); **data-used labels** on nodes that cross 1 GB in the window; down/up **sparklines** and an "Idle" state for near-zero WAN; click/hover device spotlight, VLAN legend/filter, and motion/intensity controls.
+- **Accurate live rates** — per-client throughput is derived from the **change in cumulative byte counters between polls**, not UniFi's coarse `*-r` field, so active streams show their true rate. Wired clients (which report traffic under `wired-*` keys) are fully supported.
 - **Live + historical bandwidth** — per-device download/upload, WAN throughput, and a **data-usage window** (5m / 15m / 30m / 1h / 2h / 8h). The selected window drives the panels *and* the node sizing, so the heaviest users over the window stand out even when momentarily idle.
 - **Tiered + clustered layout** — gateway → switches/APs → each hub's own clients in an organic cluster beneath it; busy devices grow, brighten, and label themselves; idle ones recede.
 - **Per-client detail** — click any node for live rate, windowed usage, session totals, signal, channel, VLAN, vendor (OUI), OS, IP/MAC, connected-since, and experience score.
@@ -120,7 +125,7 @@ Edit `config.json` (copied from `config.example.json`). Secrets should come from
 | `GET /api/status` | Adapter connection status. |
 | `GET /api/config` · `POST /api/config` | Read / write the configuration file. |
 
-All rates are normalized to **bits/sec** internally; volumes are reported in **bytes**. (Note: the Integration API reports device rates in bits/sec, but the legacy `stat/sta` client fields are bytes/sec — the adapter reconciles these. For clients, the controller's `tx_bytes` is *download*, the reverse of the gateway convention; the adapter swaps it so "↓ = download" everywhere.)
+All rates are normalized to **bits/sec** internally; volumes are reported in **bytes**. (Note: the Integration API reports device rates in bits/sec, but the legacy `stat/sta` client fields are bytes/sec — the adapter reconciles these. Wired clients report their counters under `wired-*` keys. For clients, the controller's `tx_bytes` is *download*, the reverse of the gateway convention; the adapter swaps it so "↓ = download" everywhere. **Per-client live rates are derived from cumulative-counter deltas between polls** — UniFi's `*-r` field is coarse and under-reports active streams.)
 
 ---
 
@@ -137,10 +142,13 @@ server/   Node + Fastify + TypeScript
     utils/weatherEngine.ts
 web/      React + Vite + HTML5 canvas
   src/
+    utils/reactor/engine.ts  the Reactor renderer (radial core/spine/buses, VLAN uplinks + overlay, quiet filter, telemetry)
     utils/visualization.ts   the constellation renderer (layout, nodes, links, weather)
-    components/              Header, NetworkCanvas, DeviceDetail, WanChart, Segments, TopTalkers, Events, Legend, Controls, TimePlayback
+    components/              ReactorView, Header (+ Sparkline), NetworkCanvas, DeviceDetail, WanChart, Segments, TopTalkers, Events, Legend, Controls, TimePlayback
     hooks/                  useNetworkData (SSE), useRollingData, useDeviceUsages
 ```
+
+`App.tsx` opens on the **Reactor** by default; **✕ Exit** (or `Esc`) drops to the constellation dashboard, and the header's **◎ Reactor** button returns.
 
 ---
 
