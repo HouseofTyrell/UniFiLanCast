@@ -1,6 +1,6 @@
 import { NetworkSnapshot } from '../types';
 import { computeStats } from '../utils/stats';
-import { formatBitrate } from '../utils/format';
+import { formatBitrate, IDLE_BPS } from '../utils/format';
 import { ConnState } from '../hooks/useNetworkData';
 import { WanPoint } from '../hooks/useRollingData';
 import { Sparkline } from './Sparkline';
@@ -36,15 +36,22 @@ function Rate({
   series?: number[];
 }) {
   const { value, unit } = formatBitrate(bps);
+  const idle = bps < IDLE_BPS;
   const color = direction === 'down' ? 'var(--accent-down)' : 'var(--accent-up)';
   return (
     <div className="hdr-rate">
-      <span className={`hdr-rate-arrow ${direction}`}>{direction === 'down' ? '↓' : '↑'}</span>
+      <span className={`hdr-rate-arrow ${direction}${idle ? ' idle' : ''}`}>
+        {direction === 'down' ? '↓' : '↑'}
+      </span>
       <div className="hdr-rate-body">
-        <div className="hdr-rate-value tabular">
-          {value}
-          <span className="hdr-rate-unit">{unit}</span>
-        </div>
+        {idle ? (
+          <div className="hdr-rate-value hdr-rate-idle">Idle</div>
+        ) : (
+          <div className="hdr-rate-value tabular">
+            {value}
+            <span className="hdr-rate-unit">{unit}</span>
+          </div>
+        )}
         <div className="hdr-stat-label">{label}</div>
       </div>
       {series && series.length > 1 && (

@@ -1,3 +1,6 @@
+/** Below this rate the WAN is treated as idle (shown as "Idle" rather than tiny, jittery Kbps). */
+export const IDLE_BPS = 50_000;
+
 /**
  * Format a throughput rate (bits per second) into a human-readable bitrate.
  * The adapter normalizes all device + client rates to bits/sec, so this just

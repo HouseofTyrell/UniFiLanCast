@@ -109,6 +109,17 @@
   letter-spacing: 0;
 }
 
+.hdr-rate-idle {
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
+.hdr-rate-arrow.idle {
+  color: var(--text-faint);
+}
+
 .hdr-stat {
   display: flex;
   flex-direction: column;

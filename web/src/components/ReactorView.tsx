@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NetworkSnapshot } from '../types';
 import { useDeviceUsages } from '../hooks/useDeviceUsages';
 import { WanPoint } from '../hooks/useRollingData';
+import { IDLE_BPS } from '../utils/format';
 import { Sparkline } from './Sparkline';
 import {
   ReactorEngine,
@@ -30,6 +31,12 @@ interface Props {
 const SPARK_POINTS = 30; // ~2.5 min of recent WAN throughput at 5s cadence
 
 const mono = "'JetBrains Mono',monospace";
+
+/** HUD rate readout: real value, or "Idle" when essentially nothing is flowing. */
+function hudRate(bps: number | undefined): string {
+  if (bps == null) return '—';
+  return bps < IDLE_BPS ? 'Idle' : fmtBpsShort(bps) + 'bps';
+}
 
 function uptime(ms: number): string {
   const hrs = Math.floor(ms / 3600000);
@@ -179,8 +186,8 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
-          <Hud label="▼ DOWN" labelColor="#5a93b8" value={tel ? fmtBpsShort(tel.downBps) + 'bps' : '—'} color="#7fdcff" series={downSeries} sparkColor="#7fdcff" />
-          <Hud label="▲ UP" labelColor="#b8902f" value={tel ? fmtBpsShort(tel.upBps) + 'bps' : '—'} color="#f5c969" series={upSeries} sparkColor="#f5c969" />
+          <Hud label="▼ DOWN" labelColor="#5a93b8" value={hudRate(tel?.downBps)} color={tel && tel.downBps < IDLE_BPS ? '#6c7689' : '#7fdcff'} series={downSeries} sparkColor="#7fdcff" />
+          <Hud label="▲ UP" labelColor="#b8902f" value={hudRate(tel?.upBps)} color={tel && tel.upBps < IDLE_BPS ? '#6c7689' : '#f5c969'} series={upSeries} sparkColor="#f5c969" />
           <Divider />
           <Hud label="DEVICES" labelColor="#6c7689" value={tel ? String(tel.devices) : '—'} color="#e7ecf7" />
           <Hud label="VLANS" labelColor="#6c7689" value={tel ? String(tel.vlans) : '—'} color="#e7ecf7" />
