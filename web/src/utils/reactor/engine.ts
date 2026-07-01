@@ -134,6 +134,7 @@ export class ReactorEngine {
   private ctx?: CanvasRenderingContext2D;
   private baseDpr = Math.min(2, window.devicePixelRatio || 1);
   private curDpr = 0;
+  private anyActive = false; // is any node currently moving traffic? (drives adaptive fps)
   private CW = 0;
   private CH = 0;
   private raf?: number;
@@ -431,9 +432,15 @@ export class ReactorEngine {
 
   private frame() {
     const ts = performance.now();
-    // Cap the paint rate: ~20 fps in low power (plenty for a network map),
-    // near-native otherwise. The rAF check itself is cheap; the draw is not.
-    const minMs = this.opts.lowPower ? 48 : 6;
+    // Adaptive paint rate. A full-canvas repaint is the real GPU cost, so in low
+    // power we idle at ~2 fps when nothing's moving and only climb to ~12 fps
+    // while there's live traffic (or a hover) worth animating. Full mode is
+    // near-native. The rAF check itself is cheap; the draw is not.
+    const minMs = !this.opts.lowPower
+      ? 6
+      : this.anyActive || this.hoveredId
+        ? 80
+        : 450;
     if (this.lastFrameTs !== undefined && ts - this.lastFrameTs < minMs) {
       this.raf = requestAnimationFrame(() => this.frame());
       return;
@@ -488,6 +495,7 @@ export class ReactorEngine {
   private updateRates(dt: number) {
     const k = this.clamp(dt * 3.5, 0, 1);
     const nowMs = performance.now();
+    let active = false;
     for (const d of this.devices) {
       if (!d.online) {
         d.dBps = 0;
@@ -502,10 +510,14 @@ export class ReactorEngine {
       d.dl = this.logLevel(d.dBps);
       d.ul = this.logLevel(d.uBps);
       d.act = Math.max(d.dl, d.ul);
+      const flow = Math.max(d.targetD, d.targetU, d.dBps, d.uBps);
       // Track the last moment this node was genuinely active, so the quiet
       // filter can hold it lit briefly through a bursty stream's idle gaps.
-      if (Math.max(d.targetD, d.targetU, d.dBps, d.uBps) >= ACTIVE_BPS) d.lastActive = nowMs;
+      if (flow >= ACTIVE_BPS) d.lastActive = nowMs;
+      // Anything moving meaningfully means there's motion worth animating.
+      if (flow >= ACTIVE_BPS * 0.05) active = true;
     }
+    this.anyActive = active;
   }
 
   private emitTelemetry() {
