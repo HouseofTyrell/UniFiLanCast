@@ -107,7 +107,14 @@ export interface ReactorTelemetry {
   spotIndex: number;
   spotCount: number;
   spotlight: ReactorSpotlight | null;
-  segments: Array<{ key: string; label: string; color: string; count: number; online: number }>;
+  segments: Array<{
+    key: string;
+    label: string;
+    color: string;
+    count: number;
+    online: number;
+    uplinks: Array<{ name: string; count: number }>; // access switch/AP each VLAN's devices attach through
+  }>;
   offline: number;
   filterSeg: string | null;
 }
@@ -351,6 +358,22 @@ export class ReactorEngine {
     return Math.max(1, ...G.map(g => this.groupAgg(g).used));
   }
 
+  /** Which access switch/AP each device in a group connects through, by count. */
+  private uplinksFor(devices: RDev[]): Array<{ name: string; count: number }> {
+    const counts = new Map<string, number>();
+    for (const c of devices) {
+      const up = c.parent ? this.byId[c.parent] : undefined;
+      const name =
+        up && (up.type === 'switch' || up.type === 'ap' || up.type === 'gateway')
+          ? up.name
+          : 'Direct / unknown';
+      counts.set(name, (counts.get(name) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
   private refreshSpotList() {
     this.spotList = [...this.clients]
       .filter(c => c.online)
@@ -502,7 +525,14 @@ export class ReactorEngine {
       offline,
       segments: this.groups().map(g => {
         const a = this.groupAgg(g);
-        return { key: g.key, label: g.label, color: g.color, count: g.devices.length, online: a.on };
+        return {
+          key: g.key,
+          label: g.label,
+          color: g.color,
+          count: g.devices.length,
+          online: a.on,
+          uplinks: this.uplinksFor(g.devices),
+        };
       }),
       spotlight: sd
         ? {
@@ -673,6 +703,44 @@ export class ReactorEngine {
     };
     packets(dl, '#5dd2f0', 1);
     packets(ul, '#f2b441', -1);
+    ctx.restore();
+  }
+  /** Draw the client→access-device→gateway path for the isolated VLAN. */
+  private drawUplinkPaths(ctx: CanvasRenderingContext2D, cx: number, cy: number, color: string) {
+    const seg = this.filterSeg;
+    if (!seg) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    const upSet = new Set<string>();
+    // Device → its access switch/AP.
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = this.rgba(color, 0.16);
+    for (const c of this.clients) {
+      if (c.seg !== seg || !c.online) continue;
+      const up = c.parent ? this.byId[c.parent] : undefined;
+      if (!up || up._x == null || up._y == null) continue;
+      ctx.beginPath();
+      ctx.moveTo(c._x!, c._y!);
+      ctx.lineTo(up._x!, up._y!);
+      ctx.stroke();
+      upSet.add(up.id);
+    }
+    // Access device → gateway core, plus a ring to mark the involved devices.
+    for (const id of upSet) {
+      const up = this.byId[id];
+      if (!up || up._x == null) continue;
+      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = this.rgba(color, 0.32);
+      ctx.beginPath();
+      ctx.moveTo(up._x!, up._y!);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = this.rgba(color, 0.9);
+      ctx.beginPath();
+      ctx.arc(up._x!, up._y!, (up._r || 11) + 6, 0, 6.28);
+      ctx.stroke();
+    }
     ctx.restore();
   }
   private reactorNode(ctx: CanvasRenderingContext2D, d: RDev, color: string, max: number, t: number) {
@@ -889,6 +957,11 @@ export class ReactorEngine {
     const quiet = (c: RDev) =>
       !this.opts.showQuiet && c.online && c.dBps + c.uBps < ACTIVE_BPS;
     const alphaFor = (g: any, c: RDev) => dim(g.key) * (quiet(c) ? 0.22 : 1);
+
+    // Physical topology overlay: when a VLAN is isolated, trace each of its
+    // devices to the access switch/AP it attaches through, and that access
+    // device up to the gateway core — the real path the logical bus hides.
+    if (this.filterSeg) this.drawUplinkPaths(ctx, cx, cy, segColor(this.filterSeg));
 
     for (const d of this.infra) this.conduit(ctx, cx, cy, d._x!, d._y!, d.dl, d.ul, t, 2.2, false);
     for (const g of GA) {

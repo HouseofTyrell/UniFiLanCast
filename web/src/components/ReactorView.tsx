@@ -432,7 +432,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           right: 28,
           bottom: 28,
           zIndex: 2,
-          width: 190,
+          width: 214,
           background: 'rgba(11,13,18,0.82)',
           border: '1px solid rgba(255,255,255,0.09)',
           borderRadius: 14,
@@ -456,32 +456,55 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
         {(tel?.segments ?? []).map(s => {
           const active = tel?.filterSeg === s.key;
           const dimmed = !!tel?.filterSeg && !active;
+          // Active segment shows its full access breakdown; otherwise the top 2.
+          const uplinks = active ? s.uplinks : s.uplinks.slice(0, 2);
+          const moreCount = active ? 0 : s.uplinks.length - uplinks.length;
           return (
-            <button
-              key={s.key}
-              onClick={() => toggleFilter(s.key)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 9,
-                width: '100%',
-                appearance: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
-                border: '1px solid ' + (active ? 'rgba(255,255,255,0.16)' : 'transparent'),
-                borderRadius: 8,
-                padding: '5px 7px',
-                marginBottom: 3,
-                opacity: dimmed ? 0.45 : 1,
-                transition: 'opacity .2s, background .2s',
-              }}
-              title={`Isolate ${s.label}`}
-            >
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: s.color, flex: 'none', boxShadow: `0 0 8px ${s.color}` }} />
-              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#e7ecf7' }}>{s.label}</span>
-              <span style={{ fontFamily: mono, fontSize: 11, color: '#8090a4' }}>{s.count}</span>
-            </button>
+            <div key={s.key} style={{ marginBottom: 4, opacity: dimmed ? 0.45 : 1, transition: 'opacity .2s' }}>
+              <button
+                onClick={() => toggleFilter(s.key)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  width: '100%',
+                  appearance: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
+                  border: '1px solid ' + (active ? 'rgba(255,255,255,0.16)' : 'transparent'),
+                  borderRadius: 8,
+                  padding: '5px 7px',
+                  transition: 'background .2s',
+                }}
+                title={`Isolate ${s.label}`}
+              >
+                <span style={{ width: 9, height: 9, borderRadius: '50%', background: s.color, flex: 'none', boxShadow: `0 0 8px ${s.color}` }} />
+                <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#e7ecf7' }}>{s.label}</span>
+                <span style={{ fontFamily: mono, fontSize: 11, color: '#8090a4' }}>{s.count}</span>
+              </button>
+              {uplinks.length > 0 && (
+                <div style={{ padding: '2px 7px 2px 25px' }}>
+                  {uplinks.map(u => (
+                    <div
+                      key={u.name}
+                      style={{ display: 'flex', gap: 6, fontFamily: mono, fontSize: 10, color: '#727d92', lineHeight: 1.5 }}
+                      title={`${u.count} on ${u.name}`}
+                    >
+                      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        ↳ {u.name}
+                      </span>
+                      <span style={{ color: '#8b96ab' }}>{u.count}</span>
+                    </div>
+                  ))}
+                  {moreCount > 0 && (
+                    <div style={{ fontFamily: mono, fontSize: 10, color: '#5a6373', paddingLeft: 14 }}>
+                      +{moreCount} more
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           );
         })}
         {!!tel?.offline && (
