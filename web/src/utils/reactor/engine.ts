@@ -141,6 +141,8 @@ export class ReactorEngine {
   private anyActive = false; // is any node currently moving traffic? (drives adaptive fps)
   private needsRender = true; // eco mode: repaint pending (data changed / interaction)
   private STATIC = false; // eco: freeze animation this frame (no packets/motion)
+  private burstUntil = 0; // eco: animate smoothly until this timestamp, then idle
+  private wasBursting = false;
   private CW = 0;
   private CH = 0;
   private raf?: number;
@@ -186,10 +188,15 @@ export class ReactorEngine {
 
   setOptions(o: Partial<ReactorOptions>) {
     this.opts = { ...this.opts, ...o };
-    this.needsRender = true; // reflect option changes even in eco (on-demand) mode
+    this.pokeBurst(); // reflect option changes even in eco (on-demand) mode
   }
   /** Request a single repaint (eco mode renders only when something changed). */
   requestRender() {
+    this.needsRender = true;
+  }
+  /** Eco: open a short animation window so an update eases in smoothly, then idles. */
+  private pokeBurst() {
+    this.burstUntil = performance.now() + 1100;
     this.needsRender = true;
   }
   private sizeChanged(): boolean {
@@ -242,16 +249,17 @@ export class ReactorEngine {
     } else {
       this.selectedId = this.selectedId === b.id ? null : b.id;
     }
+    this.pokeBurst();
     this.emitTelemetry();
   }
   setFilter(seg: string | null) {
     this.filterSeg = seg;
-    this.needsRender = true;
+    this.pokeBurst();
     this.emitTelemetry();
   }
   clearSelection() {
     this.selectedId = null;
-    this.needsRender = true;
+    this.pokeBurst();
     this.emitTelemetry();
   }
 
@@ -328,7 +336,7 @@ export class ReactorEngine {
     this.infra = mapped.filter(d => d.type === 'switch' || d.type === 'ap');
     this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
     this.remapSpotList(); // keep the current talker through its dwell; don't re-sort each poll
-    this.needsRender = true; // eco: a snapshot arrived — repaint once
+    this.pokeBurst(); // eco: a snapshot arrived — ease into it, then idle
   }
 
   /** Data used (bytes) for a device: windowed if available, else the total. */
@@ -346,7 +354,7 @@ export class ReactorEngine {
     this.usageWindow = map || {};
     for (const d of this.devices) d.used = this.usedFor(d.id, d.totalUsed);
     this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
-    this.needsRender = true;
+    this.pokeBurst();
   }
 
   private seedField() {
@@ -481,13 +489,24 @@ export class ReactorEngine {
     const ts = performance.now();
     const mode = this.opts.powerMode;
     if (mode === 'eco') {
-      // Repaint only when data changed / the user interacted / the canvas
-      // resized. Otherwise idle — no draw, so GPU stays near zero.
-      if (!this.needsRender && !this.sizeChanged()) {
-        this.raf = requestAnimationFrame(() => this.frame());
-        return;
+      const bursting = ts < this.burstUntil;
+      // When a burst just ended, draw one more (static) frame to settle.
+      if (this.wasBursting && !bursting) this.needsRender = true;
+      this.wasBursting = bursting;
+      if (bursting) {
+        // Smooth ease-in window: cap ~18 fps.
+        if (this.lastFrameTs !== undefined && ts - this.lastFrameTs < 55) {
+          this.raf = requestAnimationFrame(() => this.frame());
+          return;
+        }
+      } else {
+        // Idle: repaint only on data change / interaction / resize.
+        if (!this.needsRender && !this.sizeChanged()) {
+          this.raf = requestAnimationFrame(() => this.frame());
+          return;
+        }
+        this.needsRender = false; // consume the request; next frame idles again
       }
-      this.needsRender = false; // consume the request; next frame idles again
     } else {
       // Adaptive paint rate. A full-canvas repaint is the real GPU cost, so in
       // low power we idle at ~2 fps when nothing's moving and climb to ~12 fps
@@ -513,13 +532,15 @@ export class ReactorEngine {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     const eco = this.opts.powerMode === 'eco';
-    this.STATIC = eco;
+    // In eco, animate only during a post-update burst; otherwise freeze so the
+    // idle frame is static (no packets/motion) and the loop can stop drawing.
+    const bursting = eco && now < this.burstUntil;
+    this.STATIC = eco && !bursting;
     const sp = this.opts.speed ?? 1;
-    // Eco freezes the clock so nothing animates between the sparse repaints.
-    this.clock += eco ? 0 : dt * sp;
+    this.clock += this.STATIC ? 0 : dt * sp;
     const t = this.clock;
     this.INT = this.opts.intensity ?? 1;
-    this.MO = eco ? 0 : this.opts.motion ?? 1;
+    this.MO = this.STATIC ? 0 : this.opts.motion ?? 1;
     this.SHOW = this.opts.showReadouts ?? true;
 
     this.updateRates(dt);
