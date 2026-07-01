@@ -61,6 +61,9 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
 
   const setOpt = (k: keyof ReactorOptions, v: number | boolean) =>
     setOpts(o => ({ ...o, [k]: v }));
+  // backdrop-filter blur re-blurs the animated canvas every compositor frame at
+  // the display's refresh rate — a large, fixed GPU cost. Skip it in low power.
+  const glassBlur = (px: number) => (opts.lowPower ? undefined : `blur(${px}px)`);
   const toggleFilter = (key: string) =>
     engineRef.current?.setFilter(tel?.filterSeg === key ? null : key);
 
@@ -215,7 +218,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: 8,
           padding: '6px 12px',
-          backdropFilter: 'blur(10px)',
+          backdropFilter: glassBlur(10),
         }}
         title="Exit Reactor (Esc)"
       >
@@ -236,7 +239,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: 9,
           padding: '6px 8px 6px 11px',
-          backdropFilter: 'blur(10px)',
+          backdropFilter: glassBlur(10),
         }}
       >
         <span style={{ fontFamily: mono, fontSize: 10.5, letterSpacing: '0.16em', color: '#7a8498' }}>
@@ -277,7 +280,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           border: '1px solid rgba(255,255,255,0.09)',
           borderRadius: 16,
           padding: '16px 18px 17px',
-          backdropFilter: 'blur(16px)',
+          backdropFilter: glassBlur(16),
           boxShadow: '0 24px 60px -24px rgba(0,0,0,0.9)',
           pointerEvents: 'none',
         }}
@@ -389,7 +392,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           border: '1px solid rgba(255,255,255,0.12)',
           borderRadius: 8,
           padding: '5px 11px',
-          backdropFilter: 'blur(10px)',
+          backdropFilter: glassBlur(10),
         }}
       >
         ⚙ Controls
@@ -406,7 +409,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
             border: '1px solid rgba(255,255,255,0.1)',
             borderRadius: 12,
             padding: '14px 16px',
-            backdropFilter: 'blur(16px)',
+            backdropFilter: glassBlur(16),
             boxShadow: '0 24px 60px -24px rgba(0,0,0,0.9)',
           }}
         >
@@ -441,7 +444,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
           border: '1px solid rgba(255,255,255,0.09)',
           borderRadius: 14,
           padding: '13px 14px',
-          backdropFilter: 'blur(16px)',
+          backdropFilter: glassBlur(16),
           boxShadow: '0 24px 60px -24px rgba(0,0,0,0.9)',
         }}
       >
