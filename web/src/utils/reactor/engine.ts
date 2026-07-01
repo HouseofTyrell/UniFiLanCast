@@ -300,7 +300,7 @@ export class ReactorEngine {
     this.clients = mapped.filter(d => d.type === 'client');
     this.infra = mapped.filter(d => d.type === 'switch' || d.type === 'ap');
     this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
-    this.refreshSpotList();
+    this.remapSpotList(); // keep the current talker through its dwell; don't re-sort each poll
   }
 
   /** Data used (bytes) for a device: windowed if available, else the total. */
@@ -385,6 +385,24 @@ export class ReactorEngine {
       .filter(c => c.online)
       .sort((a, b) => b.dBps + b.uBps - (a.dBps + a.uBps))
       .slice(0, 6);
+    if (this.spotIdx >= this.spotList.length) this.spotIdx = 0;
+  }
+
+  /**
+   * Re-point the existing spotlight list at the fresh device objects (by id) on
+   * each snapshot WITHOUT re-sorting — so the spotlighted talker stays put for
+   * its full dwell instead of jumping every poll. Only fully rebuilds when the
+   * list is empty or has decayed (devices left / went offline).
+   */
+  private remapSpotList() {
+    const mapped = this.spotList
+      .map(c => this.byId[c.id])
+      .filter((c): c is RDev => !!c && c.online);
+    if (!mapped.length) {
+      this.refreshSpotList(); // empty (first load, or all left) → sort fresh
+      return;
+    }
+    this.spotList = mapped; // keep order + identity; re-sort happens on dwell wrap
     if (this.spotIdx >= this.spotList.length) this.spotIdx = 0;
   }
 
