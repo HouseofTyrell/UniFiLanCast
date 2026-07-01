@@ -47,6 +47,7 @@ export interface ReactorOptions {
   spotlightDwell: number;
   showReadouts: boolean;
   showQuiet: boolean; // when false, dim nodes below ACTIVE_BPS (treat as inactive)
+  lowPower: boolean; // cap FPS, render at 1x, drop glow bloom + shadow blur (default on)
 }
 export const DEFAULT_REACTOR_OPTIONS: ReactorOptions = {
   motion: 1,
@@ -55,6 +56,7 @@ export const DEFAULT_REACTOR_OPTIONS: ReactorOptions = {
   spotlightDwell: 5,
   showReadouts: true,
   showQuiet: false,
+  lowPower: true,
 };
 
 interface RDev {
@@ -130,7 +132,8 @@ const APP_START = Date.now();
 export class ReactorEngine {
   private canvas?: HTMLCanvasElement;
   private ctx?: CanvasRenderingContext2D;
-  private dpr = Math.min(2, window.devicePixelRatio || 1);
+  private baseDpr = Math.min(2, window.devicePixelRatio || 1);
+  private curDpr = 0;
   private CW = 0;
   private CH = 0;
   private raf?: number;
@@ -410,21 +413,28 @@ export class ReactorEngine {
     const r = c.getBoundingClientRect();
     const cw = Math.max(640, Math.round(r.width)),
       ch = Math.max(360, Math.round(r.height));
-    if (c !== this.canvas || cw !== this.CW || ch !== this.CH || !this.ctx) {
+    // Low power renders at 1x (a small on-screen canvas at retina 2x shades 4×
+    // the pixels every frame — the biggest single GPU cost).
+    const dpr = this.opts.lowPower ? 1 : this.baseDpr;
+    if (cw !== this.CW || ch !== this.CH || dpr !== this.curDpr || !this.ctx) {
       this.CW = cw;
       this.CH = ch;
-      c.width = cw * this.dpr;
-      c.height = ch * this.dpr;
+      this.curDpr = dpr;
+      c.width = Math.round(cw * dpr);
+      c.height = Math.round(ch * dpr);
       this.ctx = c.getContext('2d') || undefined;
     }
     if (!this.ctx) return null;
-    this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return this.ctx;
   }
 
   private frame() {
     const ts = performance.now();
-    if (this.lastFrameTs !== undefined && ts - this.lastFrameTs < 6) {
+    // Cap the paint rate: ~20 fps in low power (plenty for a network map),
+    // near-native otherwise. The rAF check itself is cheap; the draw is not.
+    const minMs = this.opts.lowPower ? 48 : 6;
+    if (this.lastFrameTs !== undefined && ts - this.lastFrameTs < minMs) {
       this.raf = requestAnimationFrame(() => this.frame());
       return;
     }
@@ -578,7 +588,10 @@ export class ReactorEngine {
     dl = Math.max(0, dl || 0);
     ul = Math.max(0, ul || 0);
     const off = o.online === false;
-    if (o.glow !== false && !off) {
+    // The additive radial-gradient bloom is drawn per node every frame — the
+    // heaviest recurring GPU cost. Skip it in low power (the gateway core keeps
+    // its own single glow); nodes still read as lit spheres.
+    if (o.glow !== false && !off && !this.opts.lowPower) {
       const heat = o.heat || 0;
       const gr = r * (2.0 + heat * 1.4) * (1 + 0.06 * Math.sin((o.t || 0) * 3 + x * 0.05));
       const str = this.clamp((0.1 + Math.max(dl, ul) * 0.5 + heat * 0.4) * INT, 0, 0.72);
@@ -643,8 +656,10 @@ export class ReactorEngine {
     const span = lvl * Math.PI * 0.42;
     ctx.lineWidth = 2.6;
     ctx.strokeStyle = this.rgba(col, 0.3 + lvl * 0.6);
-    ctx.shadowColor = col;
-    ctx.shadowBlur = 9 * lvl * this.INT;
+    if (!this.opts.lowPower) {
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 9 * lvl * this.INT;
+    }
     ctx.beginPath();
     ctx.arc(x, y, ar, center - span, center + span);
     ctx.stroke();
@@ -714,8 +729,10 @@ export class ReactorEngine {
         const px = x1 + (x2 - x1) * f,
           py = y1 + (y2 - y1) * f;
         ctx.fillStyle = this.rgba(col, 0.7 * lvl + 0.2);
-        ctx.shadowColor = col;
-        ctx.shadowBlur = 6;
+        if (!this.opts.lowPower) {
+          ctx.shadowColor = col;
+          ctx.shadowBlur = 6;
+        }
         ctx.fillRect(px - 1.4, py - 1.4, 3.2, 3.2);
         ctx.shadowBlur = 0;
       }

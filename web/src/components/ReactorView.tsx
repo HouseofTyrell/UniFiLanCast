@@ -422,6 +422,10 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
             Show &lt; 1 Mbps
             <input type="checkbox" checked={opts.showQuiet} onChange={e => setOpt('showQuiet', e.target.checked)} />
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, fontFamily: mono, fontSize: 11, color: '#aeb8cc', cursor: 'pointer' }} title="Low power: cap ~20fps, render at 1x, drop glow bloom. Uncheck for full-quality visuals (much higher GPU use).">
+            Low power
+            <input type="checkbox" checked={opts.lowPower} onChange={e => setOpt('lowPower', e.target.checked)} />
+          </label>
         </div>
       )}
 
