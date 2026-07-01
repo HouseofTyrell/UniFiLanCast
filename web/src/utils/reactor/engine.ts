@@ -654,14 +654,27 @@ export class ReactorEngine {
     ctx.strokeText(d.name, x, ly);
     ctx.fillStyle = d.online ? (bright ? '#f4f7fc' : '#cdd6e8') : '#5a6373';
     ctx.fillText(d.name, x, ly);
+    let below = ly;
     if (this.SHOW && d.online) {
+      below += 14;
       ctx.font = '500 10.5px "JetBrains Mono",monospace';
       const tx = `↓${fmtBpsShort(d.dBps)} ↑${fmtBpsShort(d.uBps)}`;
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(5,6,7,0.92)';
-      ctx.strokeText(tx, x, ly + 14);
+      ctx.strokeText(tx, x, below);
       ctx.fillStyle = '#8090a4';
-      ctx.fillText(tx, x, ly + 14);
+      ctx.fillText(tx, x, below);
+    }
+    // Data used over the selected window — shown once a node crosses 1 GB.
+    if (d.online && d.used > 1e9) {
+      below += 14;
+      ctx.font = '600 10.5px "JetBrains Mono",monospace';
+      const us = fmtBytes(d.used);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(5,6,7,0.92)';
+      ctx.strokeText(us, x, below);
+      ctx.fillStyle = '#e0c074';
+      ctx.fillText(us, x, below);
     }
   }
   private conduit(
@@ -989,6 +1002,8 @@ export class ReactorEngine {
       const top = [...(g.devices as RDev[])].filter(d => d.online).sort((a, b) => b.used - a.used).slice(0, 2);
       top.forEach(d => labelSet.add(d.id));
     }
+    // Always surface heavy hitters: any node that has moved >1 GB this window.
+    for (const c of this.clients) if (c.online && c.used > 1e9) labelSet.add(c.id);
     if (sd) labelSet.add(sd.id);
     if (this.hoveredId) labelSet.add(this.hoveredId);
     for (const g of GA) {
