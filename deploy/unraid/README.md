@@ -16,14 +16,14 @@ git clone https://github.com/HouseofTyrell/UniFiLanCast /mnt/user/appdata/unifil
 cd /mnt/user/appdata/unifilancast/src
 ```
 
-## 2. Pick a free host port (8080 is taken)
+## 2. Confirm the host port is free (8080 was taken; using 61288)
 
 ```bash
-ss -tlnp | grep ':3001 ' && echo 'IN USE — pick another' || echo '3001 is free'
+ss -tlnp | grep ':61288 ' && echo 'IN USE — pick another' || echo '61288 is free'
 ```
 
-If `3001` is taken, choose another and change the **left** side of `"3001:3001"`
-in `deploy/unraid/docker-compose.yml`. You'll reach the app at
+If `61288` is taken, choose another and change the **left** side of
+`"61288:3001"` in `deploy/unraid/docker-compose.yml`. You'll reach the app at
 `http://10.0.0.22:<that-port>`.
 
 ## 3. Configure
@@ -75,9 +75,9 @@ docker compose -f deploy/unraid/docker-compose.yml up -d --build
 
 First build takes a couple minutes (it compiles `better-sqlite3` for musl). Then:
 
-- **App:** `http://10.0.0.22:3001` (prompts for the Basic-auth login)
+- **App:** `http://10.0.0.22:61288` (prompts for the Basic-auth login)
 - **Logs:** `docker logs -f unifilancast`
-- **Health:** `curl -u admin:PASS http://10.0.0.22:3001/api/status`
+- **Health:** `curl -u admin:PASS http://10.0.0.22:61288/api/status`
 
 ## 6. Updating
 

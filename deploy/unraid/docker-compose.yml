@@ -1,6 +1,6 @@
 # UniFiLanCast — Unraid deployment (LAN-exposed + built-in HTTP Basic auth).
 #
-# Reach it at:  http://10.0.0.22:3001   (your Unraid IP + the host port below)
+# Reach it at:  http://10.0.0.22:61288   (your Unraid IP + the host port below)
 #
 # ── One-time setup on the Unraid box ─────────────────────────────────────────
 #   mkdir -p /mnt/user/appdata/unifilancast/data
@@ -16,9 +16,9 @@
 #   printf 'UNIFI_API_KEY=your-local-key\nUNIFI_AUTH_PASSWORD=choose-a-strong-one\n' \
 #       > /mnt/user/appdata/unifilancast/.env
 #
-#   # PICK A FREE HOST PORT FIRST — 8080 is taken on this box. Confirm 3001 is free:
-#   ss -tlnp | grep ':3001 ' && echo 'IN USE — pick another' || echo '3001 is free'
-#   # (if taken, change the "3001:3001" host port below to a free one)
+#   # Confirm the host port is free (8080 was taken; using 61288):
+#   ss -tlnp | grep ':61288 ' && echo 'IN USE — pick another' || echo '61288 is free'
+#   # (if taken, change the "61288:3001" host port below to a free one)
 #
 #   docker compose -f deploy/unraid/docker-compose.yml up -d --build
 #
@@ -33,10 +33,10 @@ services:
     image: unifilancast
     container_name: unifilancast
     # host:container — published on ALL interfaces so it's reachable on the LAN.
-    # Change the LEFT number if 3001 is taken. Basic auth (config.json) is the
+    # Change the LEFT number if 61288 is taken. Basic auth (config.json) is the
     # gate: the server fail-closes if HOST is non-loopback and auth is disabled.
     ports:
-      - "3001:3001"
+      - "61288:3001"
     environment:
       - NODE_ENV=production
       - HOST=0.0.0.0
