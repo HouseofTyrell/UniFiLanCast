@@ -83,6 +83,7 @@ function App() {
         connState={connState}
         stale={stale}
         site={adapters.find(a => a.site)?.site}
+        history={wanHistory}
         onReactor={() => setReactorOpen(true)}
       />
 

@@ -2,6 +2,7 @@ import { NetworkSnapshot } from '../types';
 import { computeStats } from '../utils/stats';
 import { formatBitrate } from '../utils/format';
 import { ConnState } from '../hooks/useNetworkData';
+import { WanPoint } from '../hooks/useRollingData';
 import './Header.css';
 
 interface HeaderProps {
@@ -9,7 +10,47 @@ interface HeaderProps {
   connState: ConnState;
   stale: boolean;
   site?: string;
+  history?: WanPoint[];
   onReactor?: () => void;
+}
+
+const SPARK_POINTS = 30; // ~2.5 min of recent WAN throughput at 5s cadence
+
+/** Tiny inline area sparkline of the most recent throughput samples. */
+function Sparkline({ values, color }: { values: number[]; color: string }) {
+  const w = 62;
+  const h = 24;
+  const pad = 2;
+  if (values.length < 2) return <span className="hdr-spark" style={{ width: w, height: h }} />;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+  const n = values.length;
+  const px = (i: number) => pad + (i / (n - 1)) * (w - pad * 2);
+  const py = (v: number) => h - pad - ((v - min) / range) * (h - pad * 2);
+  const line = values.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const area = `${px(0).toFixed(1)},${h} ${line} ${px(n - 1).toFixed(1)},${h}`;
+  return (
+    <svg
+      className="hdr-spark"
+      width={w}
+      height={h}
+      viewBox={`0 0 ${w} ${h}`}
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polygon points={area} fill={color} opacity="0.13" />
+      <polyline
+        points={line}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      <circle cx={px(n - 1)} cy={py(values[n - 1])} r="1.7" fill={color} />
+    </svg>
+  );
 }
 
 function connBadge(connState: ConnState, stale: boolean): { cls: string; label: string } {
@@ -19,8 +60,19 @@ function connBadge(connState: ConnState, stale: boolean): { cls: string; label: 
   return { cls: 'live', label: 'Live' };
 }
 
-function Rate({ bps, label, direction }: { bps: number; label: string; direction: 'down' | 'up' }) {
+function Rate({
+  bps,
+  label,
+  direction,
+  series,
+}: {
+  bps: number;
+  label: string;
+  direction: 'down' | 'up';
+  series?: number[];
+}) {
   const { value, unit } = formatBitrate(bps);
+  const color = direction === 'down' ? 'var(--accent-down)' : 'var(--accent-up)';
   return (
     <div className="hdr-rate">
       <span className={`hdr-rate-arrow ${direction}`}>{direction === 'down' ? '↓' : '↑'}</span>
@@ -31,6 +83,7 @@ function Rate({ bps, label, direction }: { bps: number; label: string; direction
         </div>
         <div className="hdr-stat-label">{label}</div>
       </div>
+      {series && series.length > 1 && <Sparkline values={series} color={color} />}
     </div>
   );
 }
@@ -44,9 +97,12 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: str
   );
 }
 
-export function Header({ snapshot, connState, stale, site, onReactor }: HeaderProps) {
+export function Header({ snapshot, connState, stale, site, history, onReactor }: HeaderProps) {
   const stats = computeStats(snapshot);
   const badge = connBadge(connState, stale);
+  const recent = (history ?? []).slice(-SPARK_POINTS);
+  const downSeries = recent.map(p => p.down);
+  const upSeries = recent.map(p => p.up);
 
   return (
     <header className="header">
@@ -61,8 +117,8 @@ export function Header({ snapshot, connState, stale, site, onReactor }: HeaderPr
       </div>
 
       <div className="header-stats">
-        <Rate bps={stats.wanDown} label="WAN download" direction="down" />
-        <Rate bps={stats.wanUp} label="WAN upload" direction="up" />
+        <Rate bps={stats.wanDown} label="WAN download" direction="down" series={downSeries} />
+        <Rate bps={stats.wanUp} label="WAN upload" direction="up" series={upSeries} />
         <div className="hdr-divider" />
         <Stat value={stats.infraCount} label="Devices" />
         <Stat value={stats.clientCount} label="Clients" />
