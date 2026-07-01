@@ -1,0 +1,51 @@
+# UniFiLanCast — Unraid deployment (LAN-exposed + built-in HTTP Basic auth).
+#
+# Reach it at:  http://10.0.0.22:3001   (your Unraid IP + the host port below)
+#
+# ── One-time setup on the Unraid box ─────────────────────────────────────────
+#   mkdir -p /mnt/user/appdata/unifilancast/data
+#   git clone https://github.com/HouseofTyrell/UniFiLanCast \
+#       /mnt/user/appdata/unifilancast/src
+#   cd /mnt/user/appdata/unifilancast/src
+#
+#   # config: enable the integrationApi adapter AND auth (see deploy/unraid/README.md)
+#   cp config.example.json /mnt/user/appdata/unifilancast/config.json
+#   nano /mnt/user/appdata/unifilancast/config.json
+#
+#   # secrets (NOT committed): the local UniFi key + a Basic-auth password
+#   printf 'UNIFI_API_KEY=your-local-key\nUNIFI_AUTH_PASSWORD=choose-a-strong-one\n' \
+#       > /mnt/user/appdata/unifilancast/.env
+#
+#   # PICK A FREE HOST PORT FIRST — 8080 is taken on this box. Confirm 3001 is free:
+#   ss -tlnp | grep ':3001 ' && echo 'IN USE — pick another' || echo '3001 is free'
+#   # (if taken, change the "3001:3001" host port below to a free one)
+#
+#   docker compose -f deploy/unraid/docker-compose.yml up -d --build
+#
+# The image builds from the repo root (better-sqlite3 compiles for musl); SQLite
+# history + the device inventory persist under the appdata `data/` bind mount.
+
+services:
+  app:
+    build:
+      context: ../.. # repo root (npm-workspace lockfile + Dockerfile live here)
+      dockerfile: Dockerfile
+    image: unifilancast
+    container_name: unifilancast
+    # host:container — published on ALL interfaces so it's reachable on the LAN.
+    # Change the LEFT number if 3001 is taken. Basic auth (config.json) is the
+    # gate: the server fail-closes if HOST is non-loopback and auth is disabled.
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - CONFIG_PATH=/config/config.json
+      - DATA_DIR=/data
+    env_file:
+      - /mnt/user/appdata/unifilancast/.env
+    volumes:
+      # read-write so the in-app config editor can persist changes
+      - /mnt/user/appdata/unifilancast/config.json:/config/config.json
+      - /mnt/user/appdata/unifilancast/data:/data
+    restart: unless-stopped
