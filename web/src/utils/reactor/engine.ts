@@ -59,7 +59,8 @@ interface RDev {
   targetU: number;
   dBps: number;
   uBps: number;
-  used: number;
+  used: number; // bytes over the active window (or cumulative total as fallback)
+  totalUsed: number; // cumulative session total (fallback)
   signal: number;
   seg: string;
   online: boolean;
@@ -141,6 +142,9 @@ export class ReactorEngine {
   private hoveredId: string | null = null;
   private selectedId: string | null = null;
   private filterSeg: string | null = null;
+  // Per-device data used over the selected window (bytes); when empty, `used`
+  // falls back to the cumulative session total.
+  private usageWindow: Record<string, { down: number; up: number }> = {};
   // Clickable node hit-boxes, rebuilt each frame from the drawn positions.
   private hitBoxes: Array<{ id: string; x: number; y: number; r: number; kind: 'device' | 'bus'; seg?: string }> = [];
 
@@ -255,7 +259,8 @@ export class ReactorEngine {
         targetU: Math.max(0, d.txBps || 0),
         dBps: p ? p.dBps : Math.max(0, d.rxBps || 0),
         uBps: p ? p.uBps : Math.max(0, d.txBps || 0),
-        used: (d.totalRxBytes || 0) + (d.totalTxBytes || 0),
+        totalUsed: (d.totalRxBytes || 0) + (d.totalTxBytes || 0),
+        used: this.usedFor(d.id, (d.totalRxBytes || 0) + (d.totalTxBytes || 0)),
         signal: d.rssi ?? 0,
         seg: segOf(d),
         online: d.online !== false,
@@ -275,6 +280,23 @@ export class ReactorEngine {
     this.infra = mapped.filter(d => d.type === 'switch' || d.type === 'ap');
     this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
     this.refreshSpotList();
+  }
+
+  /** Data used (bytes) for a device: windowed if available, else the total. */
+  private usedFor(id: string, totalUsed: number): number {
+    const m = this.usageWindow;
+    if (m && Object.keys(m).length > 0) {
+      const u = m[id];
+      return u ? (u.down || 0) + (u.up || 0) : 0;
+    }
+    return totalUsed;
+  }
+
+  /** Set the per-device windowed usage (bytes); recomputes `used` + sizing. */
+  setUsageWindow(map: Record<string, { down: number; up: number }>) {
+    this.usageWindow = map || {};
+    for (const d of this.devices) d.used = this.usedFor(d.id, d.totalUsed);
+    this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
   }
 
   private seedField() {

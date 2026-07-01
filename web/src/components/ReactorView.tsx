@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NetworkSnapshot } from '../types';
+import { useDeviceUsages } from '../hooks/useDeviceUsages';
 import {
   ReactorEngine,
   ReactorTelemetry,
@@ -8,6 +9,15 @@ import {
   fmtBpsShort,
   fmtBytes,
 } from '../utils/reactor/engine';
+
+const WINDOWS: Array<{ label: string; minutes: number }> = [
+  { label: '5m', minutes: 5 },
+  { label: '15m', minutes: 15 },
+  { label: '30m', minutes: 30 },
+  { label: '1h', minutes: 60 },
+  { label: '2h', minutes: 120 },
+  { label: '8h', minutes: 480 },
+];
 
 interface Props {
   snapshot: NetworkSnapshot | null;
@@ -34,6 +44,8 @@ export function ReactorView({ snapshot, onClose }: Props) {
   const [tel, setTel] = useState<ReactorTelemetry | null>(null);
   const [opts, setOpts] = useState<ReactorOptions>(DEFAULT_REACTOR_OPTIONS);
   const [showControls, setShowControls] = useState(false);
+  const [minutes, setMinutes] = useState(60);
+  const deviceUsage = useDeviceUsages(minutes);
 
   const setOpt = (k: keyof ReactorOptions, v: number | boolean) =>
     setOpts(o => ({ ...o, [k]: v }));
@@ -86,6 +98,11 @@ export function ReactorView({ snapshot, onClose }: Props) {
   useEffect(() => {
     engineRef.current?.setOptions(opts);
   }, [opts]);
+
+  // Feed the windowed per-device usage (data used over the selected period).
+  useEffect(() => {
+    engineRef.current?.setUsageWindow(deviceUsage);
+  }, [deviceUsage]);
 
   const spot = tel?.spotlight ?? null;
   const pinned = !!spot?.pinned;
@@ -189,6 +206,50 @@ export function ReactorView({ snapshot, onClose }: Props) {
       >
         ✕ Exit
       </button>
+
+      {/* DATA-USED WINDOW */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 28,
+          top: 84,
+          zIndex: 2,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 9,
+          background: 'rgba(11,13,18,0.7)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: 9,
+          padding: '6px 8px 6px 11px',
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        <span style={{ fontFamily: mono, fontSize: 10.5, letterSpacing: '0.16em', color: '#7a8498' }}>
+          DATA USED
+        </span>
+        <select
+          value={minutes}
+          onChange={e => setMinutes(Number(e.target.value))}
+          style={{
+            appearance: 'none',
+            cursor: 'pointer',
+            fontFamily: mono,
+            fontSize: 11,
+            fontWeight: 600,
+            color: '#e7ecf7',
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            borderRadius: 6,
+            padding: '3px 8px',
+          }}
+        >
+          {WINDOWS.map(w => (
+            <option key={w.minutes} value={w.minutes} style={{ background: '#0b0d12' }}>
+              last {w.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* TOP TALKER SPOTLIGHT */}
       <div
