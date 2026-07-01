@@ -47,7 +47,11 @@ export interface ReactorOptions {
   spotlightDwell: number;
   showReadouts: boolean;
   showQuiet: boolean; // when false, dim nodes below ACTIVE_BPS (treat as inactive)
-  lowPower: boolean; // cap FPS, render at 1x, drop glow bloom + shadow blur (default on)
+  // Power tier:
+  //  full — 60fps, retina 2x, glow bloom, shadow blur, panel backdrop blur.
+  //  low  — ~12fps, 1x, no bloom/blur (a few W).
+  //  eco  — repaint only on data change / interaction; frozen animation (idle GPU).
+  powerMode: 'full' | 'low' | 'eco';
 }
 export const DEFAULT_REACTOR_OPTIONS: ReactorOptions = {
   motion: 1,
@@ -56,7 +60,7 @@ export const DEFAULT_REACTOR_OPTIONS: ReactorOptions = {
   spotlightDwell: 5,
   showReadouts: true,
   showQuiet: false,
-  lowPower: true,
+  powerMode: 'eco',
 };
 
 interface RDev {
@@ -135,6 +139,8 @@ export class ReactorEngine {
   private baseDpr = Math.min(2, window.devicePixelRatio || 1);
   private curDpr = 0;
   private anyActive = false; // is any node currently moving traffic? (drives adaptive fps)
+  private needsRender = true; // eco mode: repaint pending (data changed / interaction)
+  private STATIC = false; // eco: freeze animation this frame (no packets/motion)
   private CW = 0;
   private CH = 0;
   private raf?: number;
@@ -180,6 +186,20 @@ export class ReactorEngine {
 
   setOptions(o: Partial<ReactorOptions>) {
     this.opts = { ...this.opts, ...o };
+    this.needsRender = true; // reflect option changes even in eco (on-demand) mode
+  }
+  /** Request a single repaint (eco mode renders only when something changed). */
+  requestRender() {
+    this.needsRender = true;
+  }
+  private sizeChanged(): boolean {
+    const c = this.canvas;
+    if (!c) return false;
+    const r = c.getBoundingClientRect();
+    return (
+      Math.max(640, Math.round(r.width)) !== this.CW ||
+      Math.max(360, Math.round(r.height)) !== this.CH
+    );
   }
   setTelemetry(cb: (t: ReactorTelemetry) => void) {
     this.onTelemetry = cb;
@@ -202,12 +222,17 @@ export class ReactorEngine {
   /** Hover at CSS coords; returns true if a node is under the cursor. */
   hover(x: number, y: number): boolean {
     const b = this.pick(x, y);
-    this.hoveredId = b ? b.id : null;
+    const id = b ? b.id : null;
+    if (id !== this.hoveredId) {
+      this.hoveredId = id;
+      this.needsRender = true; // repaint the hover highlight in eco mode
+    }
     return !!b;
   }
   /** Click at CSS coords: pin a device's detail, or toggle a VLAN filter. */
   click(x: number, y: number) {
     const b = this.pick(x, y);
+    this.needsRender = true;
     if (!b) {
       this.selectedId = null;
       return;
@@ -221,10 +246,12 @@ export class ReactorEngine {
   }
   setFilter(seg: string | null) {
     this.filterSeg = seg;
+    this.needsRender = true;
     this.emitTelemetry();
   }
   clearSelection() {
     this.selectedId = null;
+    this.needsRender = true;
     this.emitTelemetry();
   }
 
@@ -301,6 +328,7 @@ export class ReactorEngine {
     this.infra = mapped.filter(d => d.type === 'switch' || d.type === 'ap');
     this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
     this.remapSpotList(); // keep the current talker through its dwell; don't re-sort each poll
+    this.needsRender = true; // eco: a snapshot arrived — repaint once
   }
 
   /** Data used (bytes) for a device: windowed if available, else the total. */
@@ -318,6 +346,7 @@ export class ReactorEngine {
     this.usageWindow = map || {};
     for (const d of this.devices) d.used = this.usedFor(d.id, d.totalUsed);
     this.maxClientUsed = Math.max(1, ...this.clients.map(c => c.used));
+    this.needsRender = true;
   }
 
   private seedField() {
@@ -432,9 +461,9 @@ export class ReactorEngine {
     const r = c.getBoundingClientRect();
     const cw = Math.max(640, Math.round(r.width)),
       ch = Math.max(360, Math.round(r.height));
-    // Low power renders at 1x (a small on-screen canvas at retina 2x shades 4×
-    // the pixels every frame — the biggest single GPU cost).
-    const dpr = this.opts.lowPower ? 1 : this.baseDpr;
+    // Only full mode renders at retina 2x; low/eco render at 1x (a small canvas
+    // at 2x shades 4× the pixels every frame — a big GPU cost).
+    const dpr = this.opts.powerMode === 'full' ? this.baseDpr : 1;
     if (cw !== this.CW || ch !== this.CH || dpr !== this.curDpr || !this.ctx) {
       this.CW = cw;
       this.CH = ch;
@@ -450,18 +479,24 @@ export class ReactorEngine {
 
   private frame() {
     const ts = performance.now();
-    // Adaptive paint rate. A full-canvas repaint is the real GPU cost, so in low
-    // power we idle at ~2 fps when nothing's moving and only climb to ~12 fps
-    // while there's live traffic (or a hover) worth animating. Full mode is
-    // near-native. The rAF check itself is cheap; the draw is not.
-    const minMs = !this.opts.lowPower
-      ? 6
-      : this.anyActive || this.hoveredId
-        ? 80
-        : 450;
-    if (this.lastFrameTs !== undefined && ts - this.lastFrameTs < minMs) {
-      this.raf = requestAnimationFrame(() => this.frame());
-      return;
+    const mode = this.opts.powerMode;
+    if (mode === 'eco') {
+      // Repaint only when data changed / the user interacted / the canvas
+      // resized. Otherwise idle — no draw, so GPU stays near zero.
+      if (!this.needsRender && !this.sizeChanged()) {
+        this.raf = requestAnimationFrame(() => this.frame());
+        return;
+      }
+      this.needsRender = false; // consume the request; next frame idles again
+    } else {
+      // Adaptive paint rate. A full-canvas repaint is the real GPU cost, so in
+      // low power we idle at ~2 fps when nothing's moving and climb to ~12 fps
+      // while there's live traffic (or a hover). Full mode is near-native.
+      const minMs = mode === 'full' ? 6 : this.anyActive || this.hoveredId ? 80 : 450;
+      if (this.lastFrameTs !== undefined && ts - this.lastFrameTs < minMs) {
+        this.raf = requestAnimationFrame(() => this.frame());
+        return;
+      }
     }
     this.lastFrameTs = ts;
     try {
@@ -477,11 +512,14 @@ export class ReactorEngine {
     const now = performance.now();
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    const eco = this.opts.powerMode === 'eco';
+    this.STATIC = eco;
     const sp = this.opts.speed ?? 1;
-    this.clock += dt * sp;
+    // Eco freezes the clock so nothing animates between the sparse repaints.
+    this.clock += eco ? 0 : dt * sp;
     const t = this.clock;
     this.INT = this.opts.intensity ?? 1;
-    this.MO = this.opts.motion ?? 1;
+    this.MO = eco ? 0 : this.opts.motion ?? 1;
     this.SHOW = this.opts.showReadouts ?? true;
 
     this.updateRates(dt);
@@ -496,7 +534,9 @@ export class ReactorEngine {
         if (this.spotIdx === 0) this.refreshSpotList();
       }
     }
-    if (Math.floor(t * 4) !== this.lastHud) {
+    // Eco renders are sparse and the clock is frozen, so emit telemetry every
+    // render; otherwise throttle the React chrome update to ~4 Hz.
+    if (this.STATIC || Math.floor(t * 4) !== this.lastHud) {
       this.lastHud = Math.floor(t * 4);
       this.emitTelemetry();
     }
@@ -621,7 +661,7 @@ export class ReactorEngine {
     // The additive radial-gradient bloom is drawn per node every frame — the
     // heaviest recurring GPU cost. Skip it in low power (the gateway core keeps
     // its own single glow); nodes still read as lit spheres.
-    if (o.glow !== false && !off && !this.opts.lowPower) {
+    if (o.glow !== false && !off && this.opts.powerMode === 'full') {
       const heat = o.heat || 0;
       const gr = r * (2.0 + heat * 1.4) * (1 + 0.06 * Math.sin((o.t || 0) * 3 + x * 0.05));
       const str = this.clamp((0.1 + Math.max(dl, ul) * 0.5 + heat * 0.4) * INT, 0, 0.72);
@@ -686,7 +726,7 @@ export class ReactorEngine {
     const span = lvl * Math.PI * 0.42;
     ctx.lineWidth = 2.6;
     ctx.strokeStyle = this.rgba(col, 0.3 + lvl * 0.6);
-    if (!this.opts.lowPower) {
+    if (this.opts.powerMode === 'full') {
       ctx.shadowColor = col;
       ctx.shadowBlur = 9 * lvl * this.INT;
     }
@@ -751,7 +791,7 @@ export class ReactorEngine {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const packets = (lvl: number, col: string, dir: number) => {
-      if (lvl < 0.05) return;
+      if (this.STATIC || lvl < 0.05) return; // eco: no flowing packets
       const n = 2 + Math.round(lvl * 4);
       for (let i = 0; i < n; i++) {
         let f = (t * (0.25 + lvl * 0.7) * dir + i / n) % 1;
@@ -759,7 +799,7 @@ export class ReactorEngine {
         const px = x1 + (x2 - x1) * f,
           py = y1 + (y2 - y1) * f;
         ctx.fillStyle = this.rgba(col, 0.7 * lvl + 0.2);
-        if (!this.opts.lowPower) {
+        if (this.opts.powerMode === 'full') {
           ctx.shadowColor = col;
           ctx.shadowBlur = 6;
         }

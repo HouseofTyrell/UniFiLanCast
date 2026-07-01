@@ -63,7 +63,7 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
     setOpts(o => ({ ...o, [k]: v }));
   // backdrop-filter blur re-blurs the animated canvas every compositor frame at
   // the display's refresh rate — a large, fixed GPU cost. Skip it in low power.
-  const glassBlur = (px: number) => (opts.lowPower ? undefined : `blur(${px}px)`);
+  const glassBlur = (px: number) => (opts.powerMode === 'full' ? `blur(${px}px)` : undefined);
   const toggleFilter = (key: string) =>
     engineRef.current?.setFilter(tel?.filterSeg === key ? null : key);
 
@@ -425,10 +425,29 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
             Show &lt; 1 Mbps
             <input type="checkbox" checked={opts.showQuiet} onChange={e => setOpt('showQuiet', e.target.checked)} />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, fontFamily: mono, fontSize: 11, color: '#aeb8cc', cursor: 'pointer' }} title="Low power: cap ~20fps, render at 1x, drop glow bloom. Uncheck for full-quality visuals (much higher GPU use).">
-            Low power
-            <input type="checkbox" checked={opts.lowPower} onChange={e => setOpt('lowPower', e.target.checked)} />
-          </label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, fontFamily: mono, fontSize: 11, color: '#aeb8cc' }} title="Power: Eco repaints only on updates (idle GPU); Low is ~12fps; Full has glow + blur (highest GPU).">
+            <span>Power</span>
+            <select
+              value={opts.powerMode}
+              onChange={e => setOpts(o => ({ ...o, powerMode: e.target.value as ReactorOptions['powerMode'] }))}
+              style={{
+                appearance: 'none',
+                cursor: 'pointer',
+                fontFamily: mono,
+                fontSize: 11,
+                fontWeight: 600,
+                color: '#e7ecf7',
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.14)',
+                borderRadius: 6,
+                padding: '3px 8px',
+              }}
+            >
+              <option value="eco" style={{ background: '#0b0d12' }}>Eco (lowest)</option>
+              <option value="low" style={{ background: '#0b0d12' }}>Low</option>
+              <option value="full" style={{ background: '#0b0d12' }}>Full</option>
+            </select>
+          </div>
         </div>
       )}
 
