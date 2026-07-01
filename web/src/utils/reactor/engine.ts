@@ -779,26 +779,56 @@ export class ReactorEngine {
       ctx.fillRect(sx, sy, s.r, s.r);
     }
     if (!this.gw || !this.clients.length) return;
-    const cx = w / 2,
-      cyTop = 86,
-      cy = cyTop + (h - cyTop) / 2;
+    const cx = w / 2;
     const G = this.groups();
     const MO = this.MO;
-    const sx = 1.24;
+    // Fit the reactor into the region NOT occupied by the chrome: the HUD +
+    // data-used pill on top, and the spotlight (bottom-left) + legend
+    // (bottom-right) cards at the bottom. Center it there and stretch it
+    // horizontally (the sides are card-free) to fill the wide empty margins
+    // without any node going under a panel.
+    const OUTER = 0.57;
+    // Fill the wide empty margins without any node going under the chrome. The
+    // outer ellipse fills the full width; its vertical radius is limited only so
+    // the ellipse clears the top HUD and the bottom-CORNER cards (spotlight
+    // left, legend right). Because the ellipse narrows toward the corners, the
+    // center-bottom can dip lower (it's card-free) while the corners stay clear.
+    const topInset = Math.min(150, 30 + h * 0.1) + 12; // HUD + window pill + node
+    const cardH = Math.min(250, 60 + h * 0.2); // card height at the bottom
+    const cardMargin = 44; // node radius + label below the outer ring
+    const cardTop = h - cardH;
+    const leftCardX = 330; // spotlight card right edge (+gap)
+    const rightCardX = w - 230; // legend card left edge (−gap)
+    const padSide = 34;
+    const halfW = w / 2 - padSide;
+    // Vertical radius the ellipse can have for a given center `c`, limited by
+    // the top inset, the two bottom-corner cards, and the bottom edge.
+    const vRadiusAt = (c: number) => {
+      const clear = (cornerX: number) => {
+        const dx = Math.abs(cornerX - cx);
+        const f = 1 - Math.min(0.999, (dx / halfW) ** 2);
+        return f <= 0 ? Infinity : (cardTop - cardMargin - c) / Math.sqrt(f);
+      };
+      return Math.min(c - topInset, h - 24 - c, clear(leftCardX), clear(rightCardX));
+    };
+    // Pick the center that maximizes the usable vertical radius.
+    let cy = (topInset + h) / 2;
+    let halfV = 0;
+    for (let c = topInset + 80; c < h - cardH; c += 5) {
+      const hv = vRadiusAt(c);
+      if (hv > halfV) {
+        halfV = hv;
+        cy = c;
+      }
+    }
+    halfV = Math.max(80, halfV);
+    const base = Math.max(80, halfV / OUTER);
+    const sx = Math.max(1.1, Math.min(2.6, halfW / halfV));
     const vg = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.12, cx, cy, Math.max(w, h) * 0.6);
     vg.addColorStop(0, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(0,0,0,0.72)');
     ctx.fillStyle = vg;
     ctx.fillRect(0, 0, w, h);
-    // Size the reactor so the OUTER client ring (radius 0.57·base, stretched ×sx
-    // horizontally) plus a margin for node radius + labels always fits inside
-    // the viewport below the HUD — at any rotation — so no node is clipped.
-    const OUTER = 0.57;
-    const padX = 80;
-    const padY = 66;
-    const fitX = (w / 2 - padX) / (OUTER * sx);
-    const fitY = ((h - cyTop) / 2 - padY) / OUTER;
-    const base = Math.max(80, Math.min(w * 0.62, h - cyTop, fitX, fitY));
     const spinRot = t * 0.05 * MO;
     this.infra.forEach((d, i) => {
       const a = spinRot - Math.PI / 2 + (i / Math.max(1, this.infra.length)) * 6.28;
