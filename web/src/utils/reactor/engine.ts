@@ -788,33 +788,30 @@ export class ReactorEngine {
     // horizontally (the sides are card-free) to fill the wide empty margins
     // without any node going under a panel.
     const OUTER = 0.57;
-    // Fill the wide empty margins without any node going under the chrome. The
-    // outer ellipse fills the full width; its vertical radius is limited only so
-    // the ellipse clears the top HUD and the bottom-CORNER cards (spotlight
-    // left, legend right). Because the ellipse narrows toward the corners, the
-    // center-bottom can dip lower (it's card-free) while the corners stay clear.
-    const topInset = Math.min(150, 30 + h * 0.1) + 12; // HUD + window pill + node
-    const cardH = Math.min(250, 60 + h * 0.2); // card height at the bottom
-    const cardMargin = 44; // node radius + label below the outer ring
-    const cardTop = h - cardH;
-    const leftCardX = 330; // spotlight card right edge (+gap)
-    const rightCardX = w - 230; // legend card left edge (−gap)
-    const padSide = 34;
-    const halfW = w / 2 - padSide;
-    // Vertical radius the ellipse can have for a given center `c`, limited by
-    // the top inset, the two bottom-corner cards, and the bottom edge.
-    const vRadiusAt = (c: number) => {
-      const clear = (cornerX: number) => {
-        const dx = Math.abs(cornerX - cx);
-        const f = 1 - Math.min(0.999, (dx / halfW) ** 2);
-        return f <= 0 ? Infinity : (cardTop - cardMargin - c) / Math.sqrt(f);
-      };
-      return Math.min(c - topInset, h - 24 - c, clear(leftCardX), clear(rightCardX));
+    // Chrome the reactor must avoid: the HUD/pill on top and the two bottom-
+    // CORNER cards (spotlight bottom-left, legend bottom-right). Approximated
+    // from their actual on-screen boxes.
+    const topInset = Math.min(150, 30 + h * 0.1) + 12;
+    const nodeMargin = 42; // node radius + label below the outer ring
+    // Card clearance corners (inner-top corner of each card + a gap).
+    const leftCard = { x: 330, y: h - 226 - nodeMargin };
+    const rightCard = { x: w - 244, y: h - 174 - nodeMargin };
+    const padSide = 30;
+    const SX = 1.85; // horizontal stretch (positions only — nodes stay round)
+    const maxHalfW = w / 2 - padSide;
+    // For a candidate center `c`, the largest vertical radius whose ellipse
+    // (width = radius·SX) still clears the top, the bottom edge, the width, and
+    // both corner cards.
+    const cornerHV = (card: { x: number; y: number }, c: number) => {
+      const dy = card.y - c;
+      if (dy <= 0) return Infinity;
+      return Math.hypot(Math.abs(card.x - cx) / SX, dy);
     };
-    // Pick the center that maximizes the usable vertical radius.
+    const vRadiusAt = (c: number) =>
+      Math.min(c - topInset, h - 22 - c, maxHalfW / SX, cornerHV(leftCard, c), cornerHV(rightCard, c));
     let cy = (topInset + h) / 2;
     let halfV = 0;
-    for (let c = topInset + 80; c < h - cardH; c += 5) {
+    for (let c = topInset + 60; c < h - 60; c += 4) {
       const hv = vRadiusAt(c);
       if (hv > halfV) {
         halfV = hv;
@@ -823,7 +820,9 @@ export class ReactorEngine {
     }
     halfV = Math.max(80, halfV);
     const base = Math.max(80, halfV / OUTER);
-    const sx = Math.max(1.1, Math.min(2.6, halfW / halfV));
+    const sx = SX;
+    // Room below the ellipse's bottom that the card-free center can grow into.
+    const bottomRoom = Math.max(0, h - 26 - (cy + halfV));
     const vg = ctx.createRadialGradient(cx, cy, Math.min(w, h) * 0.12, cx, cy, Math.max(w, h) * 0.6);
     vg.addColorStop(0, 'rgba(0,0,0,0)');
     vg.addColorStop(1, 'rgba(0,0,0,0.72)');
@@ -857,6 +856,23 @@ export class ReactorEngine {
         c._x = cx + Math.cos(a) * rr * sx;
         c._y = cy + Math.sin(a) * rr;
       });
+    }
+    // Fill the card-free center-bottom band: nudge lower clients down into the
+    // empty space below the ellipse, tapering to zero near the card columns so
+    // no node slides under the spotlight (left) or legend (right) panels.
+    if (bottomRoom > 8) {
+      const taper = 90; // px over which the push fades as a node nears a card
+      for (const g of GA) {
+        for (const c of g.devices as RDev[]) {
+          const y = c._y!;
+          if (y <= cy) continue;
+          const down = Math.min(1, (y - cy) / halfV); // how far down the node sits
+          const lc = Math.min(1, Math.max(0, (c._x! - leftCard.x) / taper));
+          const rc = Math.min(1, Math.max(0, (rightCard.x - c._x!) / taper));
+          const clear = Math.min(lc, rc); // 0 near a card column, 1 mid-span
+          c._y = y + bottomRoom * down * clear * 0.85;
+        }
+      }
     }
     this.hitBoxes = [];
     const dim = (key: string) => (this.filterSeg && key !== this.filterSeg ? 0.1 : 1);
