@@ -418,6 +418,10 @@ export function ReactorView({ snapshot, history, onClose }: Props) {
             Node readouts
             <input type="checkbox" checked={opts.showReadouts} onChange={e => setOpt('showReadouts', e.target.checked)} />
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, fontFamily: mono, fontSize: 11, color: '#aeb8cc', cursor: 'pointer' }} title="Show nodes under 1 Mbps at full brightness instead of dimming them">
+            Show &lt; 1 Mbps
+            <input type="checkbox" checked={opts.showQuiet} onChange={e => setOpt('showQuiet', e.target.checked)} />
+          </label>
         </div>
       )}
 

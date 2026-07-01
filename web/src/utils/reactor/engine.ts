@@ -2,16 +2,19 @@ import { Device } from '../../types';
 
 // ── formatting (shared with the React chrome) ────────────────────────────────
 export const fmtBps = (bps: number) => {
+  if (bps >= 1e9) return (bps / 1e9).toFixed(bps >= 1e10 ? 1 : 2) + ' Gbps';
   if (bps >= 1e6) return (bps / 1e6).toFixed(bps >= 1e7 ? 0 : 1) + ' Mbps';
   if (bps >= 1e3) return (bps / 1e3).toFixed(0) + ' Kbps';
   return Math.max(0, Math.round(bps)) + ' bps';
 };
 export const fmtBpsShort = (bps: number) => {
+  if (bps >= 1e9) return (bps / 1e9).toFixed(bps >= 1e10 ? 0 : 1) + 'G';
   if (bps >= 1e6) return (bps / 1e6).toFixed(bps >= 1e7 ? 0 : 1) + 'M';
   if (bps >= 1e3) return (bps / 1e3).toFixed(0) + 'K';
   return Math.max(0, Math.round(bps)) + '';
 };
 export const fmtBytes = (b: number) => {
+  if (b >= 1e12) return (b / 1e12).toFixed(1) + ' TB';
   if (b >= 1e9) return (b / 1e9).toFixed(1) + ' GB';
   if (b >= 1e6) return (b / 1e6).toFixed(0) + ' MB';
   if (b >= 1e3) return (b / 1e3).toFixed(0) + ' KB';
@@ -34,12 +37,16 @@ function segOf(d: Device): string {
   return 'default';
 }
 
+/** A node counts as "active" once its live rate crosses this. */
+export const ACTIVE_BPS = 1_000_000; // 1 Mbps
+
 export interface ReactorOptions {
   motion: number;
   speed: number;
   intensity: number;
   spotlightDwell: number;
   showReadouts: boolean;
+  showQuiet: boolean; // when false, dim nodes below ACTIVE_BPS (treat as inactive)
 }
 export const DEFAULT_REACTOR_OPTIONS: ReactorOptions = {
   motion: 1,
@@ -47,6 +54,7 @@ export const DEFAULT_REACTOR_OPTIONS: ReactorOptions = {
   intensity: 1,
   spotlightDwell: 5,
   showReadouts: true,
+  showQuiet: false,
 };
 
 interface RDev {
@@ -876,17 +884,24 @@ export class ReactorEngine {
     }
     this.hitBoxes = [];
     const dim = (key: string) => (this.filterSeg && key !== this.filterSeg ? 0.1 : 1);
+    // A node is "quiet" if its live rate is under 1 Mbps; unless showQuiet is on,
+    // render those dimmed so only genuinely-active nodes read as active.
+    const quiet = (c: RDev) =>
+      !this.opts.showQuiet && c.online && c.dBps + c.uBps < ACTIVE_BPS;
+    const alphaFor = (g: any, c: RDev) => dim(g.key) * (quiet(c) ? 0.22 : 1);
 
     for (const d of this.infra) this.conduit(ctx, cx, cy, d._x!, d._y!, d.dl, d.ul, t, 2.2, false);
     for (const g of GA) {
-      ctx.globalAlpha = dim(g.key);
-      for (const c of g.devices as RDev[]) this.conduit(ctx, g._x, g._y, c._x!, c._y!, c.dl, c.ul, t, 1.3, !c.online);
+      for (const c of g.devices as RDev[]) {
+        ctx.globalAlpha = alphaFor(g, c);
+        this.conduit(ctx, g._x, g._y, c._x!, c._y!, c.dl, c.ul, t, 1.3, !c.online);
+      }
     }
     ctx.globalAlpha = 1;
 
     for (const g of GA) {
-      ctx.globalAlpha = dim(g.key);
       for (const c of g.devices as RDev[]) {
+        ctx.globalAlpha = alphaFor(g, c);
         this.reactorNode(ctx, c, this.colorOf(c), this.maxClientUsed, t);
         this.hitBoxes.push({ id: c.id, x: c._x!, y: c._y!, r: c._r || 6, kind: 'device' });
       }
@@ -904,9 +919,11 @@ export class ReactorEngine {
     if (sd) labelSet.add(sd.id);
     if (this.hoveredId) labelSet.add(this.hoveredId);
     for (const g of GA) {
-      ctx.globalAlpha = dim(g.key);
       for (const c of g.devices as RDev[])
-        if (labelSet.has(c.id)) this.labelName(ctx, c._x!, c._y!, c, (c._r || 6) + (c.online ? 5 : 0), !!(sd && c.id === sd.id));
+        if (labelSet.has(c.id)) {
+          ctx.globalAlpha = alphaFor(g, c);
+          this.labelName(ctx, c._x!, c._y!, c, (c._r || 6) + (c.online ? 5 : 0), !!(sd && c.id === sd.id));
+        }
     }
     ctx.globalAlpha = 1;
 
