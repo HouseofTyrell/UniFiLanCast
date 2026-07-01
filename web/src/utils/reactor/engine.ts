@@ -532,15 +532,16 @@ export class ReactorEngine {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     const eco = this.opts.powerMode === 'eco';
-    // In eco, animate only during a post-update burst; otherwise freeze so the
-    // idle frame is static (no packets/motion) and the loop can stop drawing.
-    const bursting = eco && now < this.burstUntil;
-    this.STATIC = eco && !bursting;
+    // Eco keeps the LAYOUT frozen at all times (no rotation/drift/packets) so it
+    // never snaps back between a burst and idle. A post-update burst simply
+    // repaints for ~1s while updateRates eases the rate-driven visuals (activity
+    // arcs, glow) into their new values — position stays put, so no jump.
+    this.STATIC = eco;
     const sp = this.opts.speed ?? 1;
-    this.clock += this.STATIC ? 0 : dt * sp;
+    this.clock += eco ? 0 : dt * sp;
     const t = this.clock;
     this.INT = this.opts.intensity ?? 1;
-    this.MO = this.STATIC ? 0 : this.opts.motion ?? 1;
+    this.MO = eco ? 0 : this.opts.motion ?? 1;
     this.SHOW = this.opts.showReadouts ?? true;
 
     this.updateRates(dt);
