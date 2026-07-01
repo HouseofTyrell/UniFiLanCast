@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { NetworkSnapshot } from '../types';
 import { useDeviceUsages } from '../hooks/useDeviceUsages';
+import { WanPoint } from '../hooks/useRollingData';
+import { Sparkline } from './Sparkline';
 import {
   ReactorEngine,
   ReactorTelemetry,
@@ -21,8 +23,11 @@ const WINDOWS: Array<{ label: string; minutes: number }> = [
 
 interface Props {
   snapshot: NetworkSnapshot | null;
+  history?: WanPoint[];
   onClose: () => void;
 }
+
+const SPARK_POINTS = 30; // ~2.5 min of recent WAN throughput at 5s cadence
 
 const mono = "'JetBrains Mono',monospace";
 
@@ -36,7 +41,7 @@ function uptime(ms: number): string {
  * Full-screen "Reactor Overview" — a faithful canvas port of the design, driven
  * by live device data. Toggled from the dashboard; Esc or the exit button returns.
  */
-export function ReactorView({ snapshot, onClose }: Props) {
+export function ReactorView({ snapshot, history, onClose }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<ReactorEngine | null>(null);
   const onCloseRef = useRef(onClose);
@@ -106,6 +111,9 @@ export function ReactorView({ snapshot, onClose }: Props) {
 
   const spot = tel?.spotlight ?? null;
   const pinned = !!spot?.pinned;
+  const recent = (history ?? []).slice(-SPARK_POINTS);
+  const downSeries = recent.map(p => p.down);
+  const upSeries = recent.map(p => p.up);
 
   return (
     <div
@@ -171,8 +179,8 @@ export function ReactorView({ snapshot, onClose }: Props) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
-          <Hud label="▼ DOWN" labelColor="#5a93b8" value={tel ? fmtBpsShort(tel.downBps) + 'bps' : '—'} color="#7fdcff" />
-          <Hud label="▲ UP" labelColor="#b8902f" value={tel ? fmtBpsShort(tel.upBps) + 'bps' : '—'} color="#f5c969" />
+          <Hud label="▼ DOWN" labelColor="#5a93b8" value={tel ? fmtBpsShort(tel.downBps) + 'bps' : '—'} color="#7fdcff" series={downSeries} sparkColor="#7fdcff" />
+          <Hud label="▲ UP" labelColor="#b8902f" value={tel ? fmtBpsShort(tel.upBps) + 'bps' : '—'} color="#f5c969" series={upSeries} sparkColor="#f5c969" />
           <Divider />
           <Hud label="DEVICES" labelColor="#6c7689" value={tel ? String(tel.devices) : '—'} color="#e7ecf7" />
           <Hud label="VLANS" labelColor="#6c7689" value={tel ? String(tel.vlans) : '—'} color="#e7ecf7" />
@@ -495,11 +503,28 @@ function Slider({ label, value, min, max, step, unit = 'x', onChange }: { label:
   );
 }
 
-function Hud({ label, labelColor, value, color }: { label: string; labelColor: string; value: string; color: string }) {
+function Hud({
+  label,
+  labelColor,
+  value,
+  color,
+  series,
+  sparkColor,
+}: {
+  label: string;
+  labelColor: string;
+  value: string;
+  color: string;
+  series?: number[];
+  sparkColor?: string;
+}) {
   return (
-    <div style={{ textAlign: 'right' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
       <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: '0.18em', color: labelColor }}>{label}</div>
       <div style={{ fontFamily: mono, fontSize: 24, fontWeight: 600, color, lineHeight: 1.1 }}>{value}</div>
+      {series && series.length > 1 && (
+        <Sparkline values={series} color={sparkColor ?? color} width={64} height={16} />
+      )}
     </div>
   );
 }

@@ -33,7 +33,7 @@ function App() {
   const [showConfig, setShowConfig] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>('type');
-  const [reactorOpen, setReactorOpen] = useState(false);
+  const [reactorOpen, setReactorOpen] = useState(true); // Reactor is the default view
   // Global usage window — drives the panels AND the node sizing.
   const [windowMinutes, setWindowMinutes] = useState(60);
   const deviceUsage = useDeviceUsages(windowMinutes);
@@ -66,7 +66,11 @@ function App() {
   if (reactorOpen) {
     return (
       <div className="app">
-        <ReactorView snapshot={displaySnapshot} onClose={() => setReactorOpen(false)} />
+        <ReactorView
+          snapshot={displaySnapshot}
+          history={wanHistory}
+          onClose={() => setReactorOpen(false)}
+        />
       </div>
     );
   }

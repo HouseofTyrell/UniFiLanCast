@@ -3,6 +3,7 @@ import { computeStats } from '../utils/stats';
 import { formatBitrate } from '../utils/format';
 import { ConnState } from '../hooks/useNetworkData';
 import { WanPoint } from '../hooks/useRollingData';
+import { Sparkline } from './Sparkline';
 import './Header.css';
 
 interface HeaderProps {
@@ -15,43 +16,6 @@ interface HeaderProps {
 }
 
 const SPARK_POINTS = 30; // ~2.5 min of recent WAN throughput at 5s cadence
-
-/** Tiny inline area sparkline of the most recent throughput samples. */
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  const w = 62;
-  const h = 24;
-  const pad = 2;
-  if (values.length < 2) return <span className="hdr-spark" style={{ width: w, height: h }} />;
-  const max = Math.max(...values, 1);
-  const min = Math.min(...values, 0);
-  const range = max - min || 1;
-  const n = values.length;
-  const px = (i: number) => pad + (i / (n - 1)) * (w - pad * 2);
-  const py = (v: number) => h - pad - ((v - min) / range) * (h - pad * 2);
-  const line = values.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
-  const area = `${px(0).toFixed(1)},${h} ${line} ${px(n - 1).toFixed(1)},${h}`;
-  return (
-    <svg
-      className="hdr-spark"
-      width={w}
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <polygon points={area} fill={color} opacity="0.13" />
-      <polyline
-        points={line}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
-      <circle cx={px(n - 1)} cy={py(values[n - 1])} r="1.7" fill={color} />
-    </svg>
-  );
-}
 
 function connBadge(connState: ConnState, stale: boolean): { cls: string; label: string } {
   if (connState === 'connecting') return { cls: 'down', label: 'Connecting…' };
@@ -83,7 +47,9 @@ function Rate({
         </div>
         <div className="hdr-stat-label">{label}</div>
       </div>
-      {series && series.length > 1 && <Sparkline values={series} color={color} />}
+      {series && series.length > 1 && (
+        <Sparkline values={series} color={color} className="hdr-spark" />
+      )}
     </div>
   );
 }
