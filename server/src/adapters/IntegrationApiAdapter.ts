@@ -9,7 +9,7 @@ import {
   DeviceType,
 } from '../models/types.js';
 import { logger } from '../utils/logger.js';
-import { resolveClientTraffic } from './clientTraffic.js';
+import { resolveClientTraffic, extractLegacyClientRate } from './clientTraffic.js';
 import { resolveSingleSite } from './site.js';
 import {
   RawSite,
@@ -317,11 +317,7 @@ export class IntegrationApiAdapter implements NetworkAdapter {
             ? Date.now() - uptime * 1000
             : undefined;
         map.set(String(c.mac).toLowerCase(), {
-          // download = client-side rx = AP's tx_bytes(-r); upload = rx_bytes(-r)
-          downRate: (this.pickNumber(c, ['tx_bytes-r']) ?? 0) * 8,
-          upRate: (this.pickNumber(c, ['rx_bytes-r']) ?? 0) * 8,
-          totalDown: this.pickNumber(c, ['tx_bytes']) ?? 0,
-          totalUp: this.pickNumber(c, ['rx_bytes']) ?? 0,
+          ...extractLegacyClientRate(c),
           rssiDbm: this.pickNumber(c, ['signal', 'rssi']),
           experience: this.pickNumber(c, ['satisfaction']),
           vendor: typeof c.oui === 'string' ? c.oui : undefined,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveClientTraffic } from './clientTraffic.js';
+import { resolveClientTraffic, extractLegacyClientRate } from './clientTraffic.js';
 
 describe('resolveClientTraffic', () => {
   it('uses legacy stat/sta rates and totals when a match exists', () => {
@@ -32,6 +32,59 @@ describe('resolveClientTraffic', () => {
       txBps: 0,
       totalRxBytes: 0,
       totalTxBytes: 0,
+    });
+  });
+});
+
+describe('extractLegacyClientRate', () => {
+  it('reads bare keys for a wireless client (bytes/sec → bits/sec)', () => {
+    const r = extractLegacyClientRate({
+      'tx_bytes-r': 1000,
+      'rx_bytes-r': 250,
+      tx_bytes: 5_000_000_000,
+      rx_bytes: 200_000_000,
+    });
+    expect(r).toEqual({
+      downRate: 8000, // 1000 B/s × 8
+      upRate: 2000, // 250 B/s × 8
+      totalDown: 5_000_000_000,
+      totalUp: 200_000_000,
+    });
+  });
+
+  it('reads wired- prefixed keys for a wired client (the 7950x3d case)', () => {
+    // Real payload shape: wired clients expose only `wired-` prefixed counters,
+    // and the bare tx_bytes/rx_bytes come back null — previously read as 0.
+    const r = extractLegacyClientRate({
+      tx_bytes: null,
+      rx_bytes: null,
+      'tx_bytes-r': null,
+      'rx_bytes-r': null,
+      'wired-tx_bytes': 18_020_831_195,
+      'wired-rx_bytes': 34_665_293_222,
+      'wired-tx_bytes-r': 4671.79,
+      'wired-rx_bytes-r': 599.86,
+    });
+    expect(r.totalDown).toBe(18_020_831_195);
+    expect(r.totalUp).toBe(34_665_293_222);
+    expect(r.downRate).toBeCloseTo(4671.79 * 8);
+    expect(r.upRate).toBeCloseTo(599.86 * 8);
+  });
+
+  it('prefers bare keys over wired- when both are present', () => {
+    const r = extractLegacyClientRate({
+      tx_bytes: 100,
+      'wired-tx_bytes': 999,
+    });
+    expect(r.totalDown).toBe(100);
+  });
+
+  it('returns zeros when no traffic fields are present', () => {
+    expect(extractLegacyClientRate({ mac: 'aa:bb:cc:dd:ee:ff' })).toEqual({
+      downRate: 0,
+      upRate: 0,
+      totalDown: 0,
+      totalUp: 0,
     });
   });
 });

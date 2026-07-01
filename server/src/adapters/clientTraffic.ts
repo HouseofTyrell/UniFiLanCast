@@ -30,6 +30,31 @@ export interface ClientTraffic {
   totalTxBytes: number; // cumulative upload bytes
 }
 
+/**
+ * Pull a client's rates + cumulative totals out of a raw legacy `stat/sta`
+ * record. The controller reports these under bare keys for WIRELESS clients
+ * (`tx_bytes`, `tx_bytes-r`, …) but under a `wired-` prefix for WIRED clients
+ * (`wired-tx_bytes`, `wired-tx_bytes-r`, …). We accept either so a wired PC
+ * doesn't read as zero activity. The `-r` rate fields are BYTES/sec → ×8 to
+ * bits/sec. Direction: infra `tx` = sent to client = the client's DOWNLOAD.
+ */
+export function extractLegacyClientRate(raw: any): LegacyClientRate {
+  const num = (keys: string[]): number => {
+    for (const key of keys) {
+      const v = raw?.[key];
+      if (typeof v === 'number' && Number.isFinite(v)) return v;
+      if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v);
+    }
+    return 0;
+  };
+  return {
+    downRate: num(['tx_bytes-r', 'wired-tx_bytes-r']) * 8,
+    upRate: num(['rx_bytes-r', 'wired-rx_bytes-r']) * 8,
+    totalDown: num(['tx_bytes', 'wired-tx_bytes']),
+    totalUp: num(['rx_bytes', 'wired-rx_bytes']),
+  };
+}
+
 export function resolveClientTraffic(
   rawCumulativeTx: number | undefined,
   rawCumulativeRx: number | undefined,
