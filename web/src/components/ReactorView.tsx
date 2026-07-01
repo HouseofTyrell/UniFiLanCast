@@ -3,6 +3,7 @@ import { NetworkSnapshot } from '../types';
 import {
   ReactorEngine,
   ReactorTelemetry,
+  ReactorOptions,
   DEFAULT_REACTOR_OPTIONS,
   fmtBpsShort,
   fmtBytes,
@@ -31,6 +32,27 @@ export function ReactorView({ snapshot, onClose }: Props) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const [tel, setTel] = useState<ReactorTelemetry | null>(null);
+  const [opts, setOpts] = useState<ReactorOptions>(DEFAULT_REACTOR_OPTIONS);
+  const [showControls, setShowControls] = useState(false);
+
+  const setOpt = (k: keyof ReactorOptions, v: number | boolean) =>
+    setOpts(o => ({ ...o, [k]: v }));
+  const toggleFilter = (key: string) =>
+    engineRef.current?.setFilter(tel?.filterSeg === key ? null : key);
+
+  const canvasXY = (e: { clientX: number; clientY: number }) => {
+    const r = canvasRef.current!.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const onMove = (e: React.MouseEvent) => {
+    const { x, y } = canvasXY(e);
+    const hit = engineRef.current?.hover(x, y);
+    if (canvasRef.current) canvasRef.current.style.cursor = hit ? 'pointer' : 'default';
+  };
+  const onClick = (e: React.MouseEvent) => {
+    const { x, y } = canvasXY(e);
+    engineRef.current?.click(x, y);
+  };
 
   const gatewayName =
     snapshot?.devices.find(d => d.type === 'gateway')?.name || 'Network';
@@ -60,7 +82,13 @@ export function ReactorView({ snapshot, onClose }: Props) {
     if (snapshot) engineRef.current?.setDevices(snapshot.devices);
   }, [snapshot]);
 
+  // Push control changes to the engine.
+  useEffect(() => {
+    engineRef.current?.setOptions(opts);
+  }, [opts]);
+
   const spot = tel?.spotlight ?? null;
+  const pinned = !!spot?.pinned;
 
   return (
     <div
@@ -80,6 +108,8 @@ export function ReactorView({ snapshot, onClose }: Props) {
 
       <canvas
         ref={canvasRef}
+        onMouseMove={onMove}
+        onClick={onClick}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }}
       />
 
@@ -177,24 +207,53 @@ export function ReactorView({ snapshot, onClose }: Props) {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: '0.24em', color: '#7a8498' }}>TOP TALKER</div>
-          <div style={{ display: 'flex', gap: 5 }}>
-            {Array.from({ length: tel?.spotCount ?? 0 }).map((_, i) => {
-              const active = i === (tel?.spotIndex ?? -1);
-              return (
-                <span
-                  key={i}
-                  style={{
-                    width: active ? 14 : 5,
-                    height: 5,
-                    borderRadius: 3,
-                    background: active ? spot?.segColor ?? '#5dd2f0' : 'rgba(255,255,255,0.2)',
-                    transition: 'all .3s',
-                  }}
-                />
-              );
-            })}
+          <div
+            style={{
+              fontFamily: mono,
+              fontSize: 11,
+              letterSpacing: '0.24em',
+              color: pinned ? spot?.segColor ?? '#7a8498' : '#7a8498',
+            }}
+          >
+            {pinned ? 'PINNED' : 'TOP TALKER'}
           </div>
+          {pinned ? (
+            <button
+              onClick={() => engineRef.current?.clearSelection()}
+              style={{
+                pointerEvents: 'auto',
+                appearance: 'none',
+                cursor: 'pointer',
+                background: 'transparent',
+                border: 'none',
+                color: '#7a8498',
+                fontFamily: mono,
+                fontSize: 12,
+                padding: 0,
+              }}
+              title="Release pin"
+            >
+              ✕
+            </button>
+          ) : (
+            <div style={{ display: 'flex', gap: 5 }}>
+              {Array.from({ length: tel?.spotCount ?? 0 }).map((_, i) => {
+                const active = i === (tel?.spotIndex ?? -1);
+                return (
+                  <span
+                    key={i}
+                    style={{
+                      width: active ? 14 : 5,
+                      height: 5,
+                      borderRadius: 3,
+                      background: active ? spot?.segColor ?? '#5dd2f0' : 'rgba(255,255,255,0.2)',
+                      transition: 'all .3s',
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
         <div key={spot?.id} style={{ animation: 'reactor-spotin 0.4s ease' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
@@ -214,7 +273,11 @@ export function ReactorView({ snapshot, onClose }: Props) {
             </div>
           </div>
           <div style={{ fontFamily: mono, fontSize: 11, color: '#6c7689', marginBottom: 14, paddingLeft: 19 }}>
-            {spot ? `${spot.seg.toUpperCase()} · ${spot.conn === 'wifi' ? 'WiFi' : 'Wired'}` : '—'}
+            {spot
+              ? spot.type === 'client'
+                ? `${spot.segLabel.toUpperCase()} · ${spot.conn === 'wifi' ? 'WiFi' : 'Wired'}${spot.online ? '' : ' · OFFLINE'}`
+                : `${spot.type.toUpperCase()}${spot.parent ? ` · ↑ ${spot.parent}` : ''}`
+              : '—'}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <SpotStat label="▼ DOWN" labelColor="#5a93b8" bg="rgba(125,220,255,0.08)" border="rgba(125,220,255,0.16)" color="#7fdcff" value={spot ? fmtBpsShort(spot.downBps) : '—'} />
@@ -230,6 +293,143 @@ export function ReactorView({ snapshot, onClose }: Props) {
           </div>
         </div>
       </div>
+
+      {/* CONTROLS */}
+      <button
+        onClick={() => setShowControls(s => !s)}
+        style={{
+          position: 'absolute',
+          top: 52,
+          right: 24,
+          zIndex: 2,
+          appearance: 'none',
+          cursor: 'pointer',
+          fontFamily: mono,
+          fontSize: 11,
+          letterSpacing: '0.14em',
+          textTransform: 'uppercase',
+          color: showControls ? '#ffce7a' : '#8a94a6',
+          background: 'rgba(11,13,18,0.7)',
+          border: '1px solid rgba(255,255,255,0.12)',
+          borderRadius: 8,
+          padding: '5px 11px',
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        ⚙ Controls
+      </button>
+      {showControls && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 84,
+            right: 24,
+            zIndex: 2,
+            width: 224,
+            background: 'rgba(11,13,18,0.9)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 12,
+            padding: '14px 16px',
+            backdropFilter: 'blur(16px)',
+            boxShadow: '0 24px 60px -24px rgba(0,0,0,0.9)',
+          }}
+        >
+          <Slider label="Motion" value={opts.motion} min={0} max={2.5} step={0.05} onChange={v => setOpt('motion', v)} />
+          <Slider label="Speed" value={opts.speed} min={0.25} max={2} step={0.05} onChange={v => setOpt('speed', v)} />
+          <Slider label="Intensity" value={opts.intensity} min={0.4} max={1.8} step={0.05} onChange={v => setOpt('intensity', v)} />
+          <Slider label="Spotlight dwell" value={opts.spotlightDwell} min={2} max={12} step={0.5} unit="s" onChange={v => setOpt('spotlightDwell', v)} />
+          <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, fontFamily: mono, fontSize: 11, color: '#aeb8cc', cursor: 'pointer' }}>
+            Node readouts
+            <input type="checkbox" checked={opts.showReadouts} onChange={e => setOpt('showReadouts', e.target.checked)} />
+          </label>
+        </div>
+      )}
+
+      {/* VLAN LEGEND + FILTER */}
+      <div
+        style={{
+          position: 'absolute',
+          right: 28,
+          bottom: 28,
+          zIndex: 2,
+          width: 190,
+          background: 'rgba(11,13,18,0.82)',
+          border: '1px solid rgba(255,255,255,0.09)',
+          borderRadius: 14,
+          padding: '13px 14px',
+          backdropFilter: 'blur(16px)',
+          boxShadow: '0 24px 60px -24px rgba(0,0,0,0.9)',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 9 }}>
+          <span style={{ fontFamily: mono, fontSize: 11, letterSpacing: '0.22em', color: '#7a8498' }}>SEGMENTS</span>
+          {tel?.filterSeg && (
+            <button
+              onClick={() => engineRef.current?.setFilter(null)}
+              style={{ appearance: 'none', cursor: 'pointer', background: 'transparent', border: 'none', color: '#7a8498', fontFamily: mono, fontSize: 10, padding: 0 }}
+              title="Clear filter"
+            >
+              CLEAR
+            </button>
+          )}
+        </div>
+        {(tel?.segments ?? []).map(s => {
+          const active = tel?.filterSeg === s.key;
+          const dimmed = !!tel?.filterSeg && !active;
+          return (
+            <button
+              key={s.key}
+              onClick={() => toggleFilter(s.key)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 9,
+                width: '100%',
+                appearance: 'none',
+                cursor: 'pointer',
+                textAlign: 'left',
+                background: active ? 'rgba(255,255,255,0.06)' : 'transparent',
+                border: '1px solid ' + (active ? 'rgba(255,255,255,0.16)' : 'transparent'),
+                borderRadius: 8,
+                padding: '5px 7px',
+                marginBottom: 3,
+                opacity: dimmed ? 0.45 : 1,
+                transition: 'opacity .2s, background .2s',
+              }}
+              title={`Isolate ${s.label}`}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: s.color, flex: 'none', boxShadow: `0 0 8px ${s.color}` }} />
+              <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: '#e7ecf7' }}>{s.label}</span>
+              <span style={{ fontFamily: mono, fontSize: 11, color: '#8090a4' }}>{s.count}</span>
+            </button>
+          );
+        })}
+        {!!tel?.offline && (
+          <div style={{ marginTop: 6, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.07)', fontFamily: mono, fontSize: 11, color: '#6c7689' }}>
+            <span style={{ color: '#5a6373' }}>○</span> {tel.offline} offline
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Slider({ label, value, min, max, step, unit = 'x', onChange }: { label: string; value: number; min: number; max: number; step: number; unit?: string; onChange: (v: number) => void }) {
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: mono, fontSize: 10.5, color: '#8a94a6', marginBottom: 3 }}>
+        <span>{label}</span>
+        <span style={{ color: '#aeb8cc' }}>{value.toFixed(2)}{unit}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={e => onChange(parseFloat(e.target.value))}
+        style={{ width: '100%', accentColor: '#f5a623' }}
+      />
     </div>
   );
 }

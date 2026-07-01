@@ -72,6 +72,23 @@ interface RDev {
   _r?: number;
 }
 
+export interface ReactorSpotlight {
+  id: string;
+  name: string;
+  seg: string;
+  segLabel: string;
+  segColor: string;
+  type: string;
+  conn: 'wired' | 'wifi';
+  downBps: number;
+  upBps: number;
+  usedBytes: number;
+  signal: number;
+  online: boolean;
+  parent?: string;
+  pinned: boolean;
+}
+
 export interface ReactorTelemetry {
   downBps: number;
   upBps: number;
@@ -80,17 +97,10 @@ export interface ReactorTelemetry {
   uptimeMs: number;
   spotIndex: number;
   spotCount: number;
-  spotlight: null | {
-    id: string;
-    name: string;
-    seg: string;
-    segColor: string;
-    conn: 'wired' | 'wifi';
-    downBps: number;
-    upBps: number;
-    usedBytes: number;
-    signal: number;
-  };
+  spotlight: ReactorSpotlight | null;
+  segments: Array<{ key: string; label: string; color: string; count: number; online: number }>;
+  offline: number;
+  filterSeg: string | null;
 }
 
 const APP_START = Date.now();
@@ -127,6 +137,13 @@ export class ReactorEngine {
   private spotT = 0;
   private spotDev?: RDev;
 
+  // Interaction state.
+  private hoveredId: string | null = null;
+  private selectedId: string | null = null;
+  private filterSeg: string | null = null;
+  // Clickable node hit-boxes, rebuilt each frame from the drawn positions.
+  private hitBoxes: Array<{ id: string; x: number; y: number; r: number; kind: 'device' | 'bus'; seg?: string }> = [];
+
   private onTelemetry?: (t: ReactorTelemetry) => void;
 
   private INT = 1;
@@ -142,6 +159,49 @@ export class ReactorEngine {
   }
   setTelemetry(cb: (t: ReactorTelemetry) => void) {
     this.onTelemetry = cb;
+  }
+
+  // ── interaction ──────────────────────────────────────────────────────────--
+  private pick(x: number, y: number) {
+    let best: (typeof this.hitBoxes)[number] | null = null;
+    let bestD = Infinity;
+    for (const b of this.hitBoxes) {
+      const d = Math.hypot(x - b.x, y - b.y);
+      const hit = Math.max(b.r, 10) + 3;
+      if (d <= hit && d < bestD) {
+        best = b;
+        bestD = d;
+      }
+    }
+    return best;
+  }
+  /** Hover at CSS coords; returns true if a node is under the cursor. */
+  hover(x: number, y: number): boolean {
+    const b = this.pick(x, y);
+    this.hoveredId = b ? b.id : null;
+    return !!b;
+  }
+  /** Click at CSS coords: pin a device's detail, or toggle a VLAN filter. */
+  click(x: number, y: number) {
+    const b = this.pick(x, y);
+    if (!b) {
+      this.selectedId = null;
+      return;
+    }
+    if (b.kind === 'bus') {
+      this.filterSeg = this.filterSeg === b.seg ? null : b.seg ?? null;
+    } else {
+      this.selectedId = this.selectedId === b.id ? null : b.id;
+    }
+    this.emitTelemetry();
+  }
+  setFilter(seg: string | null) {
+    this.filterSeg = seg;
+    this.emitTelemetry();
+  }
+  clearSelection() {
+    this.selectedId = null;
+    this.emitTelemetry();
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
@@ -338,7 +398,8 @@ export class ReactorEngine {
 
     this.spotT += dt;
     const dwell = this.opts.spotlightDwell ?? 5;
-    if (this.spotList.length) {
+    // Rotation pauses while a node is pinned (clicked).
+    if (this.spotList.length && !this.selectedId) {
       if (this.spotT >= dwell) {
         this.spotT = 0;
         this.spotIdx = (this.spotIdx + 1) % this.spotList.length;
@@ -382,16 +443,23 @@ export class ReactorEngine {
     if (!this.onTelemetry) return;
     let d = 0,
       u = 0,
-      on = 0;
+      on = 0,
+      offline = 0;
     for (const c of this.clients) {
       d += c.dBps;
       u += c.uBps;
       if (c.online) on++;
+      else offline++;
     }
     for (const _ of this.infra) on++;
     if (this.gw) on++;
-    const sd = this.spotList[this.spotIdx];
+
+    // Pinned selection wins; otherwise the rotating spotlight.
+    const sel = this.selectedId ? this.byId[this.selectedId] : undefined;
+    const sd = sel || this.spotList[this.spotIdx];
     this.spotDev = sd;
+    const segLabelOf = (k: string) => SEGS.find(s => s.key === k)?.label || k;
+
     this.onTelemetry({
       downBps: d,
       upBps: u,
@@ -400,17 +468,28 @@ export class ReactorEngine {
       uptimeMs: Date.now() - APP_START,
       spotIndex: this.spotIdx,
       spotCount: this.spotList.length,
+      filterSeg: this.filterSeg,
+      offline,
+      segments: this.groups().map(g => {
+        const a = this.groupAgg(g);
+        return { key: g.key, label: g.label, color: g.color, count: g.devices.length, online: a.on };
+      }),
       spotlight: sd
         ? {
             id: sd.id,
             name: sd.name,
             seg: sd.seg,
+            segLabel: segLabelOf(sd.seg),
             segColor: segColor(sd.seg),
+            type: sd.type,
             conn: sd.conn,
             downBps: sd.dBps,
             upBps: sd.uBps,
             usedBytes: sd.used,
             signal: sd.signal,
+            online: sd.online,
+            parent: sd.parent ? this.byId[sd.parent]?.name : undefined,
+            pinned: !!sel,
           }
         : null,
     });
@@ -727,22 +806,52 @@ export class ReactorEngine {
         c._y = cy + Math.sin(a) * rr;
       });
     }
+    this.hitBoxes = [];
+    const dim = (key: string) => (this.filterSeg && key !== this.filterSeg ? 0.1 : 1);
+
     for (const d of this.infra) this.conduit(ctx, cx, cy, d._x!, d._y!, d.dl, d.ul, t, 2.2, false);
-    for (const g of GA) for (const c of g.devices as RDev[]) this.conduit(ctx, g._x, g._y, c._x!, c._y!, c.dl, c.ul, t, 1.3, !c.online);
-    for (const g of GA) for (const c of g.devices as RDev[]) this.reactorNode(ctx, c, this.colorOf(c), this.maxClientUsed, t);
+    for (const g of GA) {
+      ctx.globalAlpha = dim(g.key);
+      for (const c of g.devices as RDev[]) this.conduit(ctx, g._x, g._y, c._x!, c._y!, c.dl, c.ul, t, 1.3, !c.online);
+    }
+    ctx.globalAlpha = 1;
+
+    for (const g of GA) {
+      ctx.globalAlpha = dim(g.key);
+      for (const c of g.devices as RDev[]) {
+        this.reactorNode(ctx, c, this.colorOf(c), this.maxClientUsed, t);
+        this.hitBoxes.push({ id: c.id, x: c._x!, y: c._y!, r: c._r || 6, kind: 'device' });
+      }
+    }
+    ctx.globalAlpha = 1;
+
     const sd = this.spotDev;
     if (sd && sd._x !== undefined && sd.online) this.reticle(ctx, sd._x!, sd._y!, (sd._r || 6) + 12, segColor(sd.seg), t);
+
     const labelSet = new Set<string>();
     for (const g of GA) {
       const top = [...(g.devices as RDev[])].filter(d => d.online).sort((a, b) => b.used - a.used).slice(0, 2);
       top.forEach(d => labelSet.add(d.id));
     }
     if (sd) labelSet.add(sd.id);
-    for (const g of GA)
+    if (this.hoveredId) labelSet.add(this.hoveredId);
+    for (const g of GA) {
+      ctx.globalAlpha = dim(g.key);
       for (const c of g.devices as RDev[])
         if (labelSet.has(c.id)) this.labelName(ctx, c._x!, c._y!, c, (c._r || 6) + (c.online ? 5 : 0), !!(sd && c.id === sd.id));
-    for (const d of this.infra) this.node(ctx, d._x!, d._y!, d.type === 'ap' ? 12 : 9, this.colorOf(d), d.dl, d.ul, { t, glow: d.type === 'ap' });
-    for (const g of GA) this.reactorBus(ctx, g, t);
+    }
+    ctx.globalAlpha = 1;
+
+    for (const d of this.infra) {
+      this.node(ctx, d._x!, d._y!, d.type === 'ap' ? 12 : 9, this.colorOf(d), d.dl, d.ul, { t, glow: d.type === 'ap' });
+      this.hitBoxes.push({ id: d.id, x: d._x!, y: d._y!, r: d.type === 'ap' ? 12 : 9, kind: 'device' });
+    }
+    for (const g of GA) {
+      ctx.globalAlpha = this.filterSeg && g.key !== this.filterSeg ? 0.4 : 1;
+      this.reactorBus(ctx, g, t);
+      this.hitBoxes.push({ id: 'bus:' + g.key, x: g._x, y: g._y, r: 15, kind: 'bus', seg: g.key });
+    }
+    ctx.globalAlpha = 1;
     const flare = 0.4 + 0.5 * this.gw.act;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
@@ -786,5 +895,26 @@ export class ReactorEngine {
     ctx.font = '600 11px "JetBrains Mono",monospace';
     ctx.fillStyle = '#caa86e';
     ctx.fillText(`LOAD ${(load * 100).toFixed(0)}%`, cx, cy + 60);
+    this.hitBoxes.push({ id: this.gw.id, x: cx, y: cy, r: 24, kind: 'device' });
+
+    // Hover highlight + persistent selection ring.
+    const box = (id: string | null) => (id ? this.hitBoxes.find(b => b.id === id) : undefined);
+    const hb = box(this.hoveredId);
+    if (hb && hb.id !== this.selectedId) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(hb.x, hb.y, hb.r + 6, 0, 6.28);
+      ctx.stroke();
+    }
+    const sb = box(this.selectedId);
+    if (sb) {
+      const col = sb.seg ? segColor(sb.seg) : '#ffffff';
+      ctx.strokeStyle = this.rgba(col, 0.9);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sb.x, sb.y, sb.r + 7, 0, 6.28);
+      ctx.stroke();
+    }
   }
 }
