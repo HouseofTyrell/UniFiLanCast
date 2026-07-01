@@ -426,8 +426,12 @@ export class IntegrationApiAdapter implements NetworkAdapter {
   private applyDeviceStats(device: Device, stats: any): void {
     if (!stats) return;
     const uplink = stats.uplink ?? stats;
-    device.txBps = this.extractRate(uplink, ['txRateBps', 'txRate', 'tx_bytes-r', 'txBytes']) ?? device.txBps;
-    device.rxBps = this.extractRate(uplink, ['rxRateBps', 'rxRate', 'rx_bytes-r', 'rxBytes']) ?? device.rxBps;
+    // ONLY true bits/sec rate fields. Never fall back to a cumulative byte
+    // counter (`txBytes`) or a bytes/sec field (`tx_bytes-r`): on a poll whose
+    // payload lacks `txRateBps`, that would read a lifetime counter as the
+    // instantaneous rate — a bogus multi-Gbps spike that rescales the whole map.
+    device.txBps = this.extractRate(uplink, ['txRateBps', 'txRate']) ?? device.txBps;
+    device.rxBps = this.extractRate(uplink, ['rxRateBps', 'rxRate']) ?? device.rxBps;
     const latency = this.pickNumber(stats, ['latencyMs', 'latencyAvgMs', 'uplinkLatencyMs', 'latency']);
     if (latency !== undefined) device.latencyMs = latency;
     const loss = this.pickNumber(stats, ['packetLossPct', 'lossPct', 'packetLoss']);
