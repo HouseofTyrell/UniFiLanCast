@@ -76,6 +76,7 @@ interface RDev {
   dl: number;
   ul: number;
   act: number;
+  lastActive?: number; // performance.now() ms when the node last crossed ACTIVE_BPS
   _x?: number;
   _y?: number;
   _r?: number;
@@ -283,6 +284,7 @@ export class ReactorEngine {
         dl: 0,
         ul: 0,
         act: 0,
+        lastActive: p?.lastActive, // preserve activity hold across snapshot refreshes
         _x: p?._x,
         _y: p?._y,
       };
@@ -475,6 +477,7 @@ export class ReactorEngine {
   /** Ease live rates toward the latest snapshot value, then derive levels. */
   private updateRates(dt: number) {
     const k = this.clamp(dt * 3.5, 0, 1);
+    const nowMs = performance.now();
     for (const d of this.devices) {
       if (!d.online) {
         d.dBps = 0;
@@ -489,6 +492,9 @@ export class ReactorEngine {
       d.dl = this.logLevel(d.dBps);
       d.ul = this.logLevel(d.uBps);
       d.act = Math.max(d.dl, d.ul);
+      // Track the last moment this node was genuinely active, so the quiet
+      // filter can hold it lit briefly through a bursty stream's idle gaps.
+      if (Math.max(d.targetD, d.targetU, d.dBps, d.uBps) >= ACTIVE_BPS) d.lastActive = nowMs;
     }
   }
 
@@ -965,10 +971,16 @@ export class ReactorEngine {
     }
     this.hitBoxes = [];
     const dim = (key: string) => (this.filterSeg && key !== this.filterSeg ? 0.1 : 1);
-    // A node is "quiet" if its live rate is under 1 Mbps; unless showQuiet is on,
-    // render those dimmed so only genuinely-active nodes read as active.
+    // A node is "quiet" if it hasn't crossed 1 Mbps recently; unless showQuiet
+    // is on, render those dimmed. The HOLD keeps a node lit through the brief
+    // idle gaps of a bursty stream (e.g. Plex buffering) so it doesn't strobe.
+    const HOLD_MS = 10000;
+    const nowMs = performance.now();
     const quiet = (c: RDev) =>
-      !this.opts.showQuiet && c.online && c.dBps + c.uBps < ACTIVE_BPS;
+      !this.opts.showQuiet &&
+      c.online &&
+      c.dBps + c.uBps < ACTIVE_BPS &&
+      nowMs - (c.lastActive ?? -Infinity) > HOLD_MS;
     const alphaFor = (g: any, c: RDev) => dim(g.key) * (quiet(c) ? 0.22 : 1);
 
     // Physical topology overlay: when a VLAN is isolated, trace each of its
