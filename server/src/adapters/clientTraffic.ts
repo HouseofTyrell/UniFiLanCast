@@ -55,6 +55,36 @@ export function extractLegacyClientRate(raw: any): LegacyClientRate {
   };
 }
 
+export interface RateSample {
+  rx: number; // cumulative download bytes at time t
+  tx: number; // cumulative upload bytes at time t
+  t: number; // epoch ms
+}
+
+/**
+ * Instantaneous rate (bits/sec) from the change in cumulative byte counters
+ * between two samples — far more reliable than UniFi's coarse, laggy `*-r`
+ * fields. Returns null when there's no usable prior sample so the caller can
+ * fall back to the controller-reported rate. Guards counter resets (a device
+ * reconnect zeroes the counters) and intervals too short to be meaningful.
+ */
+export function deltaRate(
+  prev: RateSample | undefined,
+  rx: number,
+  tx: number,
+  now: number,
+  minMs = 1500
+): { rxBps: number; txBps: number } | null {
+  if (!prev) return null;
+  const dtMs = now - prev.t;
+  if (dtMs < minMs) return null;
+  const drx = rx - prev.rx;
+  const dtx = tx - prev.tx;
+  if (drx < 0 || dtx < 0) return null; // counter reset — don't emit a garbage spike
+  const dt = dtMs / 1000;
+  return { rxBps: (drx * 8) / dt, txBps: (dtx * 8) / dt };
+}
+
 export function resolveClientTraffic(
   rawCumulativeTx: number | undefined,
   rawCumulativeRx: number | undefined,

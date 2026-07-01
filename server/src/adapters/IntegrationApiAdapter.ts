@@ -9,7 +9,12 @@ import {
   DeviceType,
 } from '../models/types.js';
 import { logger } from '../utils/logger.js';
-import { resolveClientTraffic, extractLegacyClientRate } from './clientTraffic.js';
+import {
+  resolveClientTraffic,
+  extractLegacyClientRate,
+  deltaRate,
+  RateSample,
+} from './clientTraffic.js';
 import { resolveSingleSite } from './site.js';
 import {
   RawSite,
@@ -75,6 +80,9 @@ export class IntegrationApiAdapter implements NetworkAdapter {
   private lastError?: string;
   private deviceCache: Device[] = [];
   private linkCache: Link[] = [];
+  // Per-client cumulative-counter samples, for deriving accurate live rates
+  // (UniFi's reported `*-r` rate is coarse and lags real traffic).
+  private rateSamples = new Map<string, RateSample>();
 
   // Throttle: fetchData() is called both on every snapshot request and on a 5s
   // poll loop. We cache results and only hit the controller once per interval to
@@ -227,6 +235,24 @@ export class IntegrationApiAdapter implements NetworkAdapter {
               if (legacy.channel !== undefined) client.channel = legacy.channel;
               if (legacy.connectedSince !== undefined) client.connectedSince = legacy.connectedSince;
             }
+            // Prefer a rate derived from the cumulative-counter delta between
+            // polls; fall back to the controller's `*-r` rate on the first
+            // sample or a counter reset.
+            const derived = deltaRate(
+              this.rateSamples.get(client.id),
+              client.totalRxBytes ?? 0,
+              client.totalTxBytes ?? 0,
+              now
+            );
+            if (derived) {
+              client.rxBps = derived.rxBps;
+              client.txBps = derived.txBps;
+            }
+            this.rateSamples.set(client.id, {
+              rx: client.totalRxBytes ?? 0,
+              tx: client.totalTxBytes ?? 0,
+              t: now,
+            });
             this.recordStateChange(client, events, now, true);
             devices.push(client);
           }
@@ -234,6 +260,11 @@ export class IntegrationApiAdapter implements NetworkAdapter {
           logger.debug({ siteId: site.id }, 'Client list not available');
         }
       }
+
+      // Drop samples for clients that are no longer present so the map can't grow
+      // without bound over a long-running session.
+      const liveIds = new Set(devices.map(d => d.id));
+      for (const id of this.rateSamples.keys()) if (!liveIds.has(id)) this.rateSamples.delete(id);
 
       const links = this.buildLinks(devices, now);
 

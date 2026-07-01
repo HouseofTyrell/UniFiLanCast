@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveClientTraffic, extractLegacyClientRate } from './clientTraffic.js';
+import { resolveClientTraffic, extractLegacyClientRate, deltaRate } from './clientTraffic.js';
 
 describe('resolveClientTraffic', () => {
   it('uses legacy stat/sta rates and totals when a match exists', () => {
@@ -86,5 +86,30 @@ describe('extractLegacyClientRate', () => {
       totalDown: 0,
       totalUp: 0,
     });
+  });
+});
+
+describe('deltaRate', () => {
+  it('derives bits/sec from cumulative counter deltas', () => {
+    // +9 Mb of download bytes over 10s → 9 Mbps. (9e6 bits = 1.125e6 bytes)
+    const prev = { rx: 1_000_000, tx: 500_000, t: 10_000 };
+    const r = deltaRate(prev, 1_000_000 + 1_125_000, 500_000, 20_000);
+    expect(r).not.toBeNull();
+    expect(r!.rxBps).toBeCloseTo(900_000); // (1_125_000 bytes ×8) / 10s = 900 Kbps
+    expect(r!.txBps).toBe(0);
+  });
+
+  it('returns null with no prior sample (caller keeps the reported rate)', () => {
+    expect(deltaRate(undefined, 100, 100, 5000)).toBeNull();
+  });
+
+  it('returns null on a counter reset instead of a bogus spike', () => {
+    const prev = { rx: 5_000_000_000, tx: 1_000_000_000, t: 0 };
+    expect(deltaRate(prev, 10_000, 0, 5000)).toBeNull(); // rx dropped → reconnect
+  });
+
+  it('ignores intervals shorter than the floor', () => {
+    const prev = { rx: 0, tx: 0, t: 1000 };
+    expect(deltaRate(prev, 1_000_000, 0, 1500)).toBeNull(); // 500ms < 1500ms
   });
 });
