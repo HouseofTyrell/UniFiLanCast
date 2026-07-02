@@ -9,6 +9,16 @@ A real-time, ambient visualization dashboard for your UniFi network. It ships tw
 
 > Connects to real UniFi hardware via the **local Network Integration API** (read-only API key). No cloud dependency required.
 
+## Screenshots
+
+**Reactor view** — the gateway as a glowing core, VLAN segment rings, and each hub's clients arced around it:
+
+![Reactor view](docs/reactor.png)
+
+**Constellation dashboard** — the tiered topology with live traffic rendered as weather, plus top talkers and a live event feed (shown here in mock mode):
+
+![Constellation dashboard](docs/dashboard.png)
+
 ---
 
 ## Highlights
