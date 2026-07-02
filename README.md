@@ -1,9 +1,9 @@
-# UniFiLanCast — Network Weather Map
+# UniFiLanCast — Real-Time UniFi Network Map
 
-A real-time, ambient visualization dashboard for your UniFi network. It ships two views of the same live data:
+A real-time visualization and monitoring dashboard for your UniFi network. It ships two views of the same live data:
 
-- **Reactor** (default) — a full-screen radial "reactor": the gateway is the glowing core, switches/APs sit on a rotating spine ring, and the three VLAN segments are buses with their clients arced around them. Isolate a VLAN to trace the physical path (device → access switch/AP → gateway).
-- **Constellation dashboard** — a living map (gateway on top, switches/APs below, clients clustered beneath) animated as a "weather map" where traffic is wind, device load is heat, outages are fog, and latency spikes are lightning.
+- **Reactor** (default) — a full-screen radial view: the gateway is the glowing core, switches/APs sit on a rotating spine ring, and the three VLAN segments are buses with their clients arced around them. Isolate a VLAN to trace the physical path (device → access switch/AP → gateway).
+- **Constellation dashboard** — a live tiered map (gateway on top, switches/APs below, clients clustered beneath) that surfaces activity at a glance: traffic flow between nodes, device load, outages, and latency spikes each render as their own ambient visual cue.
 
 ![status](https://img.shields.io/badge/status-active-green) ![TypeScript](https://img.shields.io/badge/TypeScript-100%25-blue)
 
@@ -15,7 +15,7 @@ A real-time, ambient visualization dashboard for your UniFi network. It ships tw
 
 ![Reactor view](docs/reactor.png)
 
-**Constellation dashboard** — the tiered topology with live traffic rendered as weather, plus top talkers and a live event feed (shown here in mock mode):
+**Constellation dashboard** — the tiered topology with live traffic, device load, and outages surfaced visually, plus top talkers and a live event feed (shown here in mock mode):
 
 ![Constellation dashboard](docs/dashboard.png)
 
@@ -23,14 +23,14 @@ A real-time, ambient visualization dashboard for your UniFi network. It ships tw
 
 ## Highlights
 
-- **Reactor view** — full-screen radial reactor (the default view), driven by the live data. Per-VLAN **access breakdown** (which switch/AP each segment's devices attach through) with an on-filter **physical-path overlay**; a **quiet filter** that dims sub-1 Mbps nodes (with a 10s hold so bursty streams don't strobe); **data-used labels** on nodes that cross 1 GB in the window; down/up **sparklines** and an "Idle" state for near-zero WAN; click/hover device spotlight, VLAN legend/filter, and motion/intensity controls.
+- **Reactor view** — full-screen radial view (the default), driven by the live data. Per-VLAN **access breakdown** (which switch/AP each segment's devices attach through) with an on-filter **physical-path overlay**; a **quiet filter** that dims sub-1 Mbps nodes (with a 10s hold so bursty streams don't strobe); **data-used labels** on nodes that cross 1 GB in the window; down/up **sparklines** and an "Idle" state for near-zero WAN; click/hover device spotlight, VLAN legend/filter, and motion/intensity controls.
 - **Accurate live rates** — per-client throughput is derived from the **change in cumulative byte counters between polls**, not UniFi's coarse `*-r` field, so active streams show their true rate. Wired clients (which report traffic under `wired-*` keys) are fully supported.
 - **Live + historical bandwidth** — per-device download/upload, WAN throughput, and a **data-usage window** (5m / 15m / 30m / 1h / 2h / 8h). The selected window drives the panels *and* the node sizing, so the heaviest users over the window stand out even when momentarily idle.
 - **Tiered + clustered layout** — gateway → switches/APs → each hub's own clients in an organic cluster beneath it; busy devices grow, brighten, and label themselves; idle ones recede.
 - **Per-client detail** — click any node for live rate, windowed usage, session totals, signal, channel, VLAN, vendor (OUI), OS, IP/MAC, connected-since, and experience score.
 - **VLAN coloring** — toggle to color clients by segment, with a per-VLAN throughput/segments panel.
-- **Weather effects** — directional download/upload flow strands, device-load heat glow, offline fog, latency lightning bolts.
-- **Dashboard** — live HUD, WAN trend chart, top talkers, segments, and a live events feed framing the constellation.
+- **Ambient activity effects** — directional download/upload flow strands, device-load glow, offline dimming, and latency-spike markers layered onto the map.
+- **Dashboard** — live HUD, WAN trend chart, top talkers, segments, and a live events feed framing the map.
 - **Persistence** — SQLite store keeps history, a device inventory with first-seen, and an event log across restarts.
 - **Alerting** — webhook notifications (Discord / Slack / generic) with severity gating + throttling.
 - **Auth** — optional HTTP Basic auth over the whole app.
@@ -127,7 +127,7 @@ Edit `config.json` (copied from `config.example.json`). Secrets should come from
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/snapshot` | Current network state (devices, links, events, weather). |
+| `GET /api/snapshot` | Current network state (devices, links, events, effects). |
 | `GET /api/stream` | Server-Sent Events stream of snapshots (~5s). |
 | `GET /api/history?minutes=N` | Persisted history samples. |
 | `GET /api/usage?minutes=N[&deviceId=ID]` | Total data down/up over the window (WAN, or a specific device) + a downsampled series. |
@@ -149,11 +149,10 @@ server/   Node + Fastify + TypeScript
     Store.ts         SQLite persistence (history, devices, events)
     AlertManager.ts  webhook alerting
     routes/api.ts    REST + SSE
-    utils/weatherEngine.ts
 web/      React + Vite + HTML5 canvas
   src/
     utils/reactor/engine.ts  the Reactor renderer (radial core/spine/buses, VLAN uplinks + overlay, quiet filter, telemetry)
-    utils/visualization.ts   the constellation renderer (layout, nodes, links, weather)
+    utils/visualization.ts   the constellation renderer (layout, nodes, links, effects)
     components/              ReactorView, Header (+ Sparkline), NetworkCanvas, DeviceDetail, WanChart, Segments, TopTalkers, Events, Legend, Controls, TimePlayback
     hooks/                  useNetworkData (SSE), useRollingData, useDeviceUsages
 ```
